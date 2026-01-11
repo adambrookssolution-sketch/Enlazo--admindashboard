@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Brand Fonts */
+@font-face {
+  font-family: 'Isidora Alt Bold';
+  src: url('/fonts/isidora-alt-bold.ttf') format('truetype');
+  font-weight: bold;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Centrale Sans Rounded';
+  src: url('/fonts/Centrale Sans Rounded.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+/* Base styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Centrale Sans Rounded', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: #f8f9fa;
+  color: #36004E;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Isidora Alt Bold', sans-serif;
+}
+
+/* Brand gradient */
+.gradient-brand {
+  background: linear-gradient(135deg, #FF9601 0%, #AA1BF1 50%, #009AFF 100%);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #AA1BF1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #36004E;
+}
+
+/* Utility classes */
+.text-gradient {
+  background: linear-gradient(135deg, #FF9601 0%, #AA1BF1 50%, #009AFF 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
