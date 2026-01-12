@@ -1,6 +1,13 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+/* Brand Colors - Custom theme */
+@theme {
+  --color-conexion-profunda: #36004E;
+  --color-enlace-vivo: #FF9601;
+  --color-morado-confianza: #AA1BF1;
+  --color-azul-alcance: #009AFF;
+  --color-gris-flujo: #E2E2E2;
+}
 
 /* Brand Fonts */
 @font-face {
