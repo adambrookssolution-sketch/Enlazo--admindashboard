@@ -51,12 +51,13 @@ export function ApprovalsPage() {
   const [specialists, setSpecialists] = useState<SpecialistProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('pending');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [selectedSpecialist, setSelectedSpecialist] = useState<SpecialistProfile | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
   const [showRejectionInput, setShowRejectionInput] = useState(false);
+  const [showRevokeConfirm, setShowRevokeConfirm] = useState(false);
 
   useEffect(() => {
     loadSpecialists();
@@ -87,21 +88,18 @@ export function ApprovalsPage() {
 
       if (error) throw error;
 
-      // Fetch profiles for names
       const userIds = data?.map(s => s.user_id) || [];
       const { data: profiles } = await supabase
         .from('profiles')
         .select('id, first_name, last_name_paterno, last_name_materno')
         .in('id', userIds);
 
-      // Fetch categories
       const specialistIds = data?.map(s => s.id) || [];
       const { data: categories } = await supabase
         .from('specialist_categories')
         .select('specialist_id, category:categories(category_name)')
         .in('specialist_id', specialistIds);
 
-      // Map profiles and categories to specialists
       const profilesMap = new Map(profiles?.map(p => [p.id, p]));
       const categoriesMap = new Map<string, typeof categories>();
       categories?.forEach(c => {
@@ -143,23 +141,34 @@ export function ApprovalsPage() {
   }
 
   function getStatusBadge(status: string) {
+    const baseStyle: React.CSSProperties = {
+      padding: '4px 12px',
+      fontSize: '12px',
+      fontWeight: 500,
+      borderRadius: '9999px',
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '4px',
+      fontFamily: "'Centrale Sans Rounded', sans-serif"
+    };
+
     switch (status) {
       case 'approved':
         return (
-          <span className="px-3 py-1 text-xs font-medium bg-green-100 text-green-700 rounded-full flex items-center gap-1">
-            <CheckCircle className="w-3 h-3" /> Aprobado
+          <span style={{ ...baseStyle, backgroundColor: '#DCFCE7', color: '#15803D' }}>
+            <CheckCircle style={{ width: '12px', height: '12px' }} /> Aprobado
           </span>
         );
       case 'rejected':
         return (
-          <span className="px-3 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full flex items-center gap-1">
-            <XCircle className="w-3 h-3" /> Rechazado
+          <span style={{ ...baseStyle, backgroundColor: '#FEE2E2', color: '#B91C1C' }}>
+            <XCircle style={{ width: '12px', height: '12px' }} /> Rechazado
           </span>
         );
       default:
         return (
-          <span className="px-3 py-1 text-xs font-medium bg-yellow-100 text-yellow-700 rounded-full flex items-center gap-1">
-            <Clock className="w-3 h-3" /> Pendiente
+          <span style={{ ...baseStyle, backgroundColor: '#FEF3C7', color: '#A16207' }}>
+            <Clock style={{ width: '12px', height: '12px' }} /> Pendiente
           </span>
         );
     }
@@ -168,7 +177,6 @@ export function ApprovalsPage() {
   async function handleApprove(specialist: SpecialistProfile) {
     setActionLoading(true);
     try {
-      // Update specialist status
       const { error: updateError } = await supabase
         .from('specialist_profiles')
         .update({ status: 'approved' })
@@ -176,7 +184,6 @@ export function ApprovalsPage() {
 
       if (updateError) throw updateError;
 
-      // Add specialist role
       const { error: roleError } = await supabase
         .from('user_roles')
         .insert({
@@ -188,7 +195,6 @@ export function ApprovalsPage() {
         throw roleError;
       }
 
-      // Refresh list
       await loadSpecialists();
       setShowDetailModal(false);
       setSelectedSpecialist(null);
@@ -207,7 +213,6 @@ export function ApprovalsPage() {
 
     setActionLoading(true);
     try {
-      // Update specialist status
       const { error: updateError } = await supabase
         .from('specialist_profiles')
         .update({ status: 'rejected' })
@@ -215,14 +220,12 @@ export function ApprovalsPage() {
 
       if (updateError) throw updateError;
 
-      // Remove specialist role if exists
       await supabase
         .from('user_roles')
         .delete()
         .eq('user_id', specialist.user_id)
         .eq('role', 'specialist');
 
-      // Refresh list
       await loadSpecialists();
       setShowDetailModal(false);
       setSelectedSpecialist(null);
@@ -235,25 +238,64 @@ export function ApprovalsPage() {
     }
   }
 
+  async function handleRevoke(specialist: SpecialistProfile) {
+    setActionLoading(true);
+    try {
+      // Update specialist status to rejected
+      const { error: updateError } = await supabase
+        .from('specialist_profiles')
+        .update({ status: 'rejected' })
+        .eq('id', specialist.id);
+
+      if (updateError) throw updateError;
+
+      // Remove specialist role
+      await supabase
+        .from('user_roles')
+        .delete()
+        .eq('user_id', specialist.user_id)
+        .eq('role', 'specialist');
+
+      await loadSpecialists();
+      setShowRevokeConfirm(false);
+      setShowDetailModal(false);
+      setSelectedSpecialist(null);
+    } catch (error) {
+      console.error('Error revoking specialist:', error);
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
   const pendingCount = specialists.filter(s => s.status === 'pending').length;
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-4 border-morado-confianza/30 border-t-morado-confianza rounded-full animate-spin" />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '256px' }}>
+        <div
+          style={{
+            width: '32px',
+            height: '32px',
+            border: '4px solid rgba(170,27,241,0.3)',
+            borderTopColor: '#AA1BF1',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite'
+          }}
+        />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div>
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '16px', marginBottom: '24px' }}>
         <div>
-          <h2 className="text-xl font-bold text-conexion-profunda">
+          <h2 style={{ fontFamily: "'Isidora Alt Bold', sans-serif", fontSize: '20px', fontWeight: 'bold', color: '#36004E', margin: 0 }}>
             Aprobacion de Especialistas
           </h2>
-          <p className="text-gray-500 text-sm">
+          <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '14px', color: '#6B7280', margin: '4px 0 0 0' }}>
             {pendingCount} especialistas pendientes de aprobacion
           </p>
         </div>
@@ -261,32 +303,50 @@ export function ApprovalsPage() {
 
       {/* Alert for pending */}
       {pendingCount > 0 && (
-        <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-xl flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0" />
-          <p className="text-yellow-800">
+        <div style={{ padding: '16px', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+          <AlertCircle style={{ width: '20px', height: '20px', color: '#D97706', flexShrink: 0 }} />
+          <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", color: '#92400E', margin: 0 }}>
             Hay <strong>{pendingCount}</strong> especialistas esperando aprobacion
           </p>
         </div>
       )}
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', marginBottom: '24px' }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
+          <Search style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', width: '20px', height: '20px', color: '#9CA3AF' }} />
           <input
             type="text"
             placeholder="Buscar por nombre, telefono, RFC..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-morado-confianza focus:border-morado-confianza"
+            style={{
+              width: '100%',
+              padding: '12px 16px 12px 48px',
+              border: '1px solid #E5E7EB',
+              borderRadius: '12px',
+              fontSize: '14px',
+              fontFamily: "'Centrale Sans Rounded', sans-serif",
+              outline: 'none',
+              boxSizing: 'border-box'
+            }}
           />
         </div>
-        <div className="flex items-center gap-2">
-          <Filter className="w-5 h-5 text-gray-400" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Filter style={{ width: '20px', height: '20px', color: '#9CA3AF' }} />
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-            className="px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-morado-confianza focus:border-morado-confianza bg-white"
+            style={{
+              padding: '12px 16px',
+              border: '1px solid #E5E7EB',
+              borderRadius: '12px',
+              fontSize: '14px',
+              fontFamily: "'Centrale Sans Rounded', sans-serif",
+              backgroundColor: 'white',
+              outline: 'none',
+              cursor: 'pointer'
+            }}
           >
             <option value="all">Todos los estados</option>
             <option value="pending">Pendientes</option>
@@ -297,71 +357,71 @@ export function ApprovalsPage() {
       </div>
 
       {/* Specialists List */}
-      <div className="space-y-4">
+      <div>
         {filteredSpecialists.map((specialist) => (
           <div
             key={specialist.id}
-            className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow"
+            style={{
+              backgroundColor: 'white',
+              borderRadius: '16px',
+              padding: '24px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+              border: '1px solid #F3F4F6',
+              marginBottom: '16px'
+            }}
           >
-            <div className="flex items-start gap-4">
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
               {/* Photo */}
               {specialist.profile_photo_url ? (
-                <img
-                  src={specialist.profile_photo_url}
-                  alt=""
-                  className="w-16 h-16 rounded-xl object-cover"
-                />
+                <img src={specialist.profile_photo_url} alt="" style={{ width: '64px', height: '64px', borderRadius: '12px', objectFit: 'cover' }} />
               ) : (
-                <div className="w-16 h-16 rounded-xl gradient-brand flex items-center justify-center text-white text-xl font-bold">
+                <div style={{ width: '64px', height: '64px', borderRadius: '12px', background: 'linear-gradient(135deg, #FF9601 0%, #AA1BF1 50%, #009AFF 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '20px', fontWeight: 'bold', fontFamily: "'Isidora Alt Bold', sans-serif" }}>
                   {specialist.profile?.first_name?.[0] || 'E'}
                 </div>
               )}
 
               {/* Info */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-4">
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
                   <div>
-                    <h3 className="font-bold text-conexion-profunda text-lg">
+                    <h3 style={{ fontFamily: "'Isidora Alt Bold', sans-serif", fontWeight: 'bold', color: '#36004E', fontSize: '18px', margin: 0 }}>
                       {getFullName(specialist)}
                     </h3>
                     {specialist.razon_social && (
-                      <p className="text-gray-600">{specialist.razon_social}</p>
+                      <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", color: '#4B5563', margin: '4px 0 0 0' }}>{specialist.razon_social}</p>
                     )}
                   </div>
                   {getStatusBadge(specialist.status)}
                 </div>
 
-                <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm text-gray-600">
-                  <div className="flex items-center gap-2">
-                    <Phone className="w-4 h-4 text-gray-400" />
+                <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', fontSize: '14px', color: '#4B5563' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontFamily: "'Centrale Sans Rounded', sans-serif" }}>
+                    <Phone style={{ width: '16px', height: '16px', color: '#9CA3AF' }} />
                     {specialist.phone}
                   </div>
                   {specialist.email && (
-                    <div className="flex items-center gap-2">
-                      <Mail className="w-4 h-4 text-gray-400" />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontFamily: "'Centrale Sans Rounded', sans-serif" }}>
+                      <Mail style={{ width: '16px', height: '16px', color: '#9CA3AF' }} />
                       {specialist.email}
                     </div>
                   )}
                   {specialist.state && (
-                    <div className="flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-gray-400" />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontFamily: "'Centrale Sans Rounded', sans-serif" }}>
+                      <MapPin style={{ width: '16px', height: '16px', color: '#9CA3AF' }} />
                       {specialist.city}, {specialist.state}
                     </div>
                   )}
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-gray-400" />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontFamily: "'Centrale Sans Rounded', sans-serif" }}>
+                    <Calendar style={{ width: '16px', height: '16px', color: '#9CA3AF' }} />
                     {new Date(specialist.created_at).toLocaleDateString('es-MX')}
                   </div>
                 </div>
 
                 {/* Categories */}
                 {specialist.categories && specialist.categories.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-2">
+                  <div style={{ marginTop: '12px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                     {specialist.categories.map((cat, idx) => (
-                      <span
-                        key={idx}
-                        className="px-2 py-1 text-xs bg-morado-confianza/10 text-morado-confianza rounded-full"
-                      >
+                      <span key={idx} style={{ padding: '4px 8px', fontSize: '12px', backgroundColor: 'rgba(170,27,241,0.1)', color: '#AA1BF1', borderRadius: '9999px', fontFamily: "'Centrale Sans Rounded', sans-serif" }}>
                         {cat.category?.category_name}
                       </span>
                     ))}
@@ -370,37 +430,49 @@ export function ApprovalsPage() {
               </div>
 
               {/* Actions */}
-              <div className="flex items-center gap-2">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <button
-                  onClick={() => {
-                    setSelectedSpecialist(specialist);
-                    setShowDetailModal(true);
-                  }}
-                  className="p-2 text-gray-400 hover:text-morado-confianza hover:bg-morado-confianza/10 rounded-lg transition-colors"
+                  onClick={() => { setSelectedSpecialist(specialist); setShowDetailModal(true); }}
+                  style={{ padding: '8px', color: '#9CA3AF', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
                   title="Ver detalles"
                 >
-                  <Eye className="w-5 h-5" />
+                  <Eye style={{ width: '20px', height: '20px' }} />
                 </button>
                 {specialist.status === 'pending' && (
                   <>
                     <button
                       onClick={() => handleApprove(specialist)}
-                      className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                      style={{ padding: '8px', color: '#16A34A', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
                       title="Aprobar"
                     >
-                      <CheckCircle className="w-5 h-5" />
+                      <CheckCircle style={{ width: '20px', height: '20px' }} />
                     </button>
                     <button
-                      onClick={() => {
-                        setSelectedSpecialist(specialist);
-                        setShowRejectionInput(true);
-                      }}
-                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      onClick={() => { setSelectedSpecialist(specialist); setShowRejectionInput(true); }}
+                      style={{ padding: '8px', color: '#DC2626', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
                       title="Rechazar"
                     >
-                      <XCircle className="w-5 h-5" />
+                      <XCircle style={{ width: '20px', height: '20px' }} />
                     </button>
                   </>
+                )}
+                {specialist.status === 'approved' && (
+                  <button
+                    onClick={() => { setSelectedSpecialist(specialist); setShowRevokeConfirm(true); }}
+                    style={{ padding: '8px', color: '#DC2626', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
+                    title="Revocar"
+                  >
+                    <XCircle style={{ width: '20px', height: '20px' }} />
+                  </button>
+                )}
+                {specialist.status === 'rejected' && (
+                  <button
+                    onClick={() => handleApprove(specialist)}
+                    style={{ padding: '8px', color: '#16A34A', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
+                    title="Reactivar"
+                  >
+                    <CheckCircle style={{ width: '20px', height: '20px' }} />
+                  </button>
                 )}
               </div>
             </div>
@@ -408,122 +480,106 @@ export function ApprovalsPage() {
         ))}
 
         {filteredSpecialists.length === 0 && (
-          <div className="bg-white rounded-2xl p-12 text-center shadow-sm border border-gray-100">
-            <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500">No se encontraron especialistas</p>
+          <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '48px', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', border: '1px solid #F3F4F6' }}>
+            <FileText style={{ width: '48px', height: '48px', color: '#D1D5DB', margin: '0 auto 16px' }} />
+            <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", color: '#6B7280' }}>No se encontraron especialistas</p>
           </div>
         )}
       </div>
 
       {/* Detail Modal */}
       {showDetailModal && selectedSpecialist && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-conexion-profunda">
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', backgroundColor: 'rgba(0,0,0,0.5)', overflowY: 'auto' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '16px', maxWidth: '600px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ position: 'sticky', top: 0, backgroundColor: 'white', borderBottom: '1px solid #F3F4F6', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h3 style={{ fontFamily: "'Isidora Alt Bold', sans-serif", fontSize: '18px', fontWeight: 'bold', color: '#36004E', margin: 0 }}>
                 Detalles del Especialista
               </h3>
-              <button
-                onClick={() => {
-                  setShowDetailModal(false);
-                  setSelectedSpecialist(null);
-                }}
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <X className="w-5 h-5" />
+              <button onClick={() => { setShowDetailModal(false); setSelectedSpecialist(null); }} style={{ padding: '8px', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+                <X style={{ width: '20px', height: '20px' }} />
               </button>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div style={{ padding: '24px' }}>
               {/* Header */}
-              <div className="flex items-center gap-4">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
                 {selectedSpecialist.profile_photo_url ? (
-                  <img
-                    src={selectedSpecialist.profile_photo_url}
-                    alt=""
-                    className="w-20 h-20 rounded-xl object-cover"
-                  />
+                  <img src={selectedSpecialist.profile_photo_url} alt="" style={{ width: '80px', height: '80px', borderRadius: '12px', objectFit: 'cover' }} />
                 ) : (
-                  <div className="w-20 h-20 rounded-xl gradient-brand flex items-center justify-center text-white text-2xl font-bold">
+                  <div style={{ width: '80px', height: '80px', borderRadius: '12px', background: 'linear-gradient(135deg, #FF9601 0%, #AA1BF1 50%, #009AFF 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '24px', fontWeight: 'bold' }}>
                     {selectedSpecialist.profile?.first_name?.[0] || 'E'}
                   </div>
                 )}
                 <div>
-                  <h4 className="text-xl font-bold text-conexion-profunda">
+                  <h4 style={{ fontFamily: "'Isidora Alt Bold', sans-serif", fontSize: '20px', fontWeight: 'bold', color: '#36004E', margin: 0 }}>
                     {getFullName(selectedSpecialist)}
                   </h4>
                   {selectedSpecialist.razon_social && (
-                    <p className="text-gray-600">{selectedSpecialist.razon_social}</p>
+                    <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", color: '#4B5563', margin: '4px 0 0 0' }}>{selectedSpecialist.razon_social}</p>
                   )}
-                  {getStatusBadge(selectedSpecialist.status)}
+                  <div style={{ marginTop: '8px' }}>{getStatusBadge(selectedSpecialist.status)}</div>
                 </div>
               </div>
 
               {/* Info Grid */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 bg-gray-50 rounded-xl">
-                  <p className="text-sm text-gray-500 mb-1">RFC</p>
-                  <p className="font-medium text-conexion-profunda">{selectedSpecialist.rfc}</p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px', marginBottom: '24px' }}>
+                <div style={{ padding: '16px', backgroundColor: '#F9FAFB', borderRadius: '12px' }}>
+                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '13px', color: '#6B7280', marginBottom: '4px' }}>RFC</p>
+                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontWeight: 500, color: '#36004E', margin: 0 }}>{selectedSpecialist.rfc}</p>
                 </div>
-                <div className="p-4 bg-gray-50 rounded-xl">
-                  <p className="text-sm text-gray-500 mb-1">Tipo de Persona</p>
-                  <p className="font-medium text-conexion-profunda">
-                    {selectedSpecialist.person_type === 'fisica' ? 'Fisica' : 'Moral'}
-                  </p>
+                <div style={{ padding: '16px', backgroundColor: '#F9FAFB', borderRadius: '12px' }}>
+                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '13px', color: '#6B7280', marginBottom: '4px' }}>Tipo de Persona</p>
+                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontWeight: 500, color: '#36004E', margin: 0 }}>{selectedSpecialist.person_type === 'fisica' ? 'Fisica' : 'Moral'}</p>
                 </div>
-                <div className="p-4 bg-gray-50 rounded-xl">
-                  <p className="text-sm text-gray-500 mb-1">Telefono</p>
-                  <p className="font-medium text-conexion-profunda">{selectedSpecialist.phone}</p>
+                <div style={{ padding: '16px', backgroundColor: '#F9FAFB', borderRadius: '12px' }}>
+                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '13px', color: '#6B7280', marginBottom: '4px' }}>Telefono</p>
+                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontWeight: 500, color: '#36004E', margin: 0 }}>{selectedSpecialist.phone}</p>
                 </div>
-                <div className="p-4 bg-gray-50 rounded-xl">
-                  <p className="text-sm text-gray-500 mb-1">Email</p>
-                  <p className="font-medium text-conexion-profunda">{selectedSpecialist.email || 'No proporcionado'}</p>
+                <div style={{ padding: '16px', backgroundColor: '#F9FAFB', borderRadius: '12px' }}>
+                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '13px', color: '#6B7280', marginBottom: '4px' }}>Email</p>
+                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontWeight: 500, color: '#36004E', margin: 0 }}>{selectedSpecialist.email || 'No proporcionado'}</p>
                 </div>
               </div>
 
               {/* Description */}
               {selectedSpecialist.professional_description && (
-                <div className="p-4 bg-gray-50 rounded-xl">
-                  <p className="text-sm text-gray-500 mb-2">Descripcion Profesional</p>
-                  <p className="text-conexion-profunda">{selectedSpecialist.professional_description}</p>
+                <div style={{ padding: '16px', backgroundColor: '#F9FAFB', borderRadius: '12px', marginBottom: '24px' }}>
+                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '13px', color: '#6B7280', marginBottom: '8px' }}>Descripcion Profesional</p>
+                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", color: '#36004E', margin: 0 }}>{selectedSpecialist.professional_description}</p>
                 </div>
               )}
 
               {/* Document */}
-              <div className="p-4 bg-gray-50 rounded-xl">
-                <p className="text-sm text-gray-500 mb-2">Documento de Identidad</p>
+              <div style={{ padding: '16px', backgroundColor: '#F9FAFB', borderRadius: '12px', marginBottom: '24px' }}>
+                <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '13px', color: '#6B7280', marginBottom: '8px' }}>Documento de Identidad</p>
                 <a
                   href={selectedSpecialist.id_document_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-morado-confianza hover:underline"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: '#AA1BF1', textDecoration: 'none', fontFamily: "'Centrale Sans Rounded', sans-serif" }}
                 >
-                  <FileText className="w-4 h-4" />
+                  <FileText style={{ width: '16px', height: '16px' }} />
                   Ver documento
-                  <ChevronRight className="w-4 h-4" />
+                  <ChevronRight style={{ width: '16px', height: '16px' }} />
                 </a>
               </div>
 
               {/* Actions */}
               {selectedSpecialist.status === 'pending' && (
-                <div className="flex gap-3 pt-4 border-t border-gray-100">
+                <div style={{ display: 'flex', gap: '12px', paddingTop: '16px', borderTop: '1px solid #F3F4F6' }}>
                   <button
                     onClick={() => handleReject(selectedSpecialist)}
                     disabled={actionLoading}
-                    className="flex-1 px-4 py-3 border border-red-200 text-red-600 font-medium rounded-xl hover:bg-red-50 transition-colors disabled:opacity-50"
+                    style={{ flex: 1, padding: '12px 16px', border: '1px solid #FCA5A5', backgroundColor: 'white', color: '#DC2626', fontWeight: 500, borderRadius: '12px', cursor: actionLoading ? 'not-allowed' : 'pointer', opacity: actionLoading ? 0.5 : 1, fontFamily: "'Centrale Sans Rounded', sans-serif" }}
                   >
                     Rechazar
                   </button>
                   <button
                     onClick={() => handleApprove(selectedSpecialist)}
                     disabled={actionLoading}
-                    className="flex-1 px-4 py-3 bg-green-600 text-white font-medium rounded-xl hover:bg-green-700 transition-colors disabled:opacity-50"
+                    style={{ flex: 1, padding: '12px 16px', border: 'none', backgroundColor: '#16A34A', color: 'white', fontWeight: 500, borderRadius: '12px', cursor: actionLoading ? 'not-allowed' : 'pointer', opacity: actionLoading ? 0.5 : 1, fontFamily: "'Centrale Sans Rounded', sans-serif" }}
                   >
-                    {actionLoading ? (
-                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto" />
-                    ) : (
-                      'Aprobar'
-                    )}
+                    {actionLoading ? 'Cargando...' : 'Aprobar'}
                   </button>
                 </div>
               )}
@@ -534,55 +590,79 @@ export function ApprovalsPage() {
 
       {/* Rejection Modal */}
       {showRejectionInput && selectedSpecialist && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-conexion-profunda">
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '16px', maxWidth: '400px', width: '100%', padding: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <h3 style={{ fontFamily: "'Isidora Alt Bold', sans-serif", fontSize: '18px', fontWeight: 'bold', color: '#36004E', margin: 0 }}>
                 Rechazar Especialista
               </h3>
-              <button
-                onClick={() => {
-                  setShowRejectionInput(false);
-                  setRejectionReason('');
-                }}
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <X className="w-5 h-5" />
+              <button onClick={() => { setShowRejectionInput(false); setRejectionReason(''); }} style={{ padding: '8px', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+                <X style={{ width: '20px', height: '20px' }} />
               </button>
             </div>
 
-            <p className="text-gray-600 mb-4">
+            <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", color: '#4B5563', marginBottom: '16px' }}>
               Por favor, indica la razon del rechazo para <strong>{getFullName(selectedSpecialist)}</strong>
             </p>
 
             <textarea
               value={rejectionReason}
               onChange={(e) => setRejectionReason(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-morado-confianza focus:border-morado-confianza resize-none"
+              style={{ width: '100%', padding: '12px 16px', border: '1px solid #E5E7EB', borderRadius: '12px', fontSize: '14px', fontFamily: "'Centrale Sans Rounded', sans-serif", resize: 'none', outline: 'none', boxSizing: 'border-box' }}
               rows={4}
               placeholder="Escribe la razon del rechazo..."
             />
 
-            <div className="flex gap-3 mt-4">
-              <button
-                onClick={() => {
-                  setShowRejectionInput(false);
-                  setRejectionReason('');
-                }}
-                className="flex-1 px-4 py-3 border border-gray-200 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-colors"
-              >
+            <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+              <button onClick={() => { setShowRejectionInput(false); setRejectionReason(''); }} style={{ flex: 1, padding: '12px 16px', border: '1px solid #E5E7EB', backgroundColor: 'white', color: '#374151', fontWeight: 500, borderRadius: '12px', cursor: 'pointer', fontFamily: "'Centrale Sans Rounded', sans-serif" }}>
                 Cancelar
               </button>
               <button
                 onClick={() => handleReject(selectedSpecialist)}
                 disabled={!rejectionReason.trim() || actionLoading}
-                className="flex-1 px-4 py-3 bg-red-600 text-white font-medium rounded-xl hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ flex: 1, padding: '12px 16px', border: 'none', backgroundColor: '#DC2626', color: 'white', fontWeight: 500, borderRadius: '12px', cursor: (!rejectionReason.trim() || actionLoading) ? 'not-allowed' : 'pointer', opacity: (!rejectionReason.trim() || actionLoading) ? 0.5 : 1, fontFamily: "'Centrale Sans Rounded', sans-serif" }}
               >
-                {actionLoading ? (
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto" />
-                ) : (
-                  'Rechazar'
-                )}
+                {actionLoading ? 'Cargando...' : 'Rechazar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Revoke Confirmation Modal */}
+      {showRevokeConfirm && selectedSpecialist && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '16px', maxWidth: '400px', width: '100%', padding: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <h3 style={{ fontFamily: "'Isidora Alt Bold', sans-serif", fontSize: '18px', fontWeight: 'bold', color: '#36004E', margin: 0 }}>
+                Revocar Especialista
+              </h3>
+              <button onClick={() => { setShowRevokeConfirm(false); setSelectedSpecialist(null); }} style={{ padding: '8px', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+                <X style={{ width: '20px', height: '20px' }} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', backgroundColor: '#FEF2F2', borderRadius: '12px', marginBottom: '16px' }}>
+              <AlertCircle style={{ width: '24px', height: '24px', color: '#DC2626' }} />
+              <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", color: '#991B1B', margin: 0, fontSize: '14px' }}>
+                Esta accion revocara el estado de especialista
+              </p>
+            </div>
+
+            <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", color: '#4B5563', marginBottom: '24px' }}>
+              Estas seguro de que deseas revocar el estado de especialista de <strong>{getFullName(selectedSpecialist)}</strong>? El usuario perdera sus privilegios de especialista.
+            </p>
+
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button onClick={() => { setShowRevokeConfirm(false); setSelectedSpecialist(null); }} style={{ flex: 1, padding: '12px 16px', border: '1px solid #E5E7EB', backgroundColor: 'white', color: '#374151', fontWeight: 500, borderRadius: '12px', cursor: 'pointer', fontFamily: "'Centrale Sans Rounded', sans-serif" }}>
+                Cancelar
+              </button>
+              <button
+                onClick={() => handleRevoke(selectedSpecialist)}
+                disabled={actionLoading}
+                style={{ flex: 1, padding: '12px 16px', border: 'none', backgroundColor: '#DC2626', color: 'white', fontWeight: 500, borderRadius: '12px', cursor: actionLoading ? 'not-allowed' : 'pointer', opacity: actionLoading ? 0.5 : 1, fontFamily: "'Centrale Sans Rounded', sans-serif" }}
+              >
+                {actionLoading ? 'Cargando...' : 'Revocar'}
               </button>
             </div>
           </div>
