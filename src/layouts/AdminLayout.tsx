@@ -182,14 +182,14 @@ export function AdminLayout({ children }: AdminLayoutProps) {
             borderBottom: '1px solid rgba(255,255,255,0.1)',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: sidebarOpen ? 'flex-start' : 'center'
+            justifyContent: 'center'
           }}
         >
           <img
             src={sidebarOpen ? '/images/logo.png' : '/images/logo-icon.png'}
             alt="Enlazo"
             style={{
-              height: sidebarOpen ? '28px' : '36px'
+              height: '30px'
             }}
           />
         </div>

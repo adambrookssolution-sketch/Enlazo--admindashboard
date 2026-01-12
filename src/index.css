@@ -51,23 +51,42 @@ h1, h2, h3, h4, h5, h6 {
   background: linear-gradient(135deg, #FF9601 0%, #AA1BF1 50%, #009AFF 100%);
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar - hidden until hover or scroll */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+*:hover {
+  scrollbar-color: rgba(170, 27, 241, 0.5) transparent;
+}
+
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 4px;
+  background: transparent;
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #AA1BF1;
-  border-radius: 4px;
+  background: transparent;
+  border-radius: 3px;
+  transition: background 0.3s ease;
 }
 
-::-webkit-scrollbar-thumb:hover {
+*:hover::-webkit-scrollbar-thumb {
+  background: rgba(170, 27, 241, 0.5);
+}
+
+*:hover::-webkit-scrollbar-thumb:hover {
+  background: #AA1BF1;
+}
+
+/* Show scrollbar on active scroll */
+*::-webkit-scrollbar-thumb:active {
   background: #36004E;
 }
 
