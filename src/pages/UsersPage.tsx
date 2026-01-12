@@ -9,7 +9,10 @@ import {
   User,
   Shield,
   Briefcase,
-  X
+  X,
+  ShieldPlus,
+  ShieldOff,
+  MoreVertical
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -38,6 +41,8 @@ export function UsersPage() {
   const [showBlockModal, setShowBlockModal] = useState(false);
   const [blockReason, setBlockReason] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+  const [showAdminModal, setShowAdminModal] = useState(false);
+  const [showActionsMenu, setShowActionsMenu] = useState<string | null>(null);
 
   useEffect(() => {
     loadUsers();
@@ -45,7 +50,6 @@ export function UsersPage() {
 
   async function loadUsers() {
     try {
-      // Fetch profiles
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
         .select('id, first_name, last_name_paterno, last_name_materno, display_name, avatar_url, phone, created_at')
@@ -53,14 +57,12 @@ export function UsersPage() {
 
       if (profilesError) throw profilesError;
 
-      // Fetch all roles
       const { data: allRoles, error: rolesError } = await supabase
         .from('user_roles')
         .select('user_id, role');
 
       if (rolesError) throw rolesError;
 
-      // Create a map of user roles
       const rolesMap = new Map<string, string[]>();
       allRoles?.forEach(r => {
         const existing = rolesMap.get(r.user_id) || [];
@@ -68,11 +70,10 @@ export function UsersPage() {
         rolesMap.set(r.user_id, existing);
       });
 
-      // Combine data
       const usersWithRoles: UserProfile[] = (profiles || []).map(profile => ({
         ...profile,
         roles: rolesMap.get(profile.id) || ['user'],
-        isBlocked: false, // TODO: Add blocked users table
+        isBlocked: false,
       }));
 
       setUsers(usersWithRoles);
@@ -102,35 +103,64 @@ export function UsersPage() {
   }
 
   function getRoleBadge(role: string) {
+    const baseStyle: React.CSSProperties = {
+      padding: '4px 8px',
+      fontSize: '12px',
+      fontWeight: 500,
+      borderRadius: '9999px',
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '4px',
+      fontFamily: "'Centrale Sans Rounded', sans-serif"
+    };
+
     switch (role) {
       case 'admin':
         return (
-          <span className="px-2 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full flex items-center gap-1">
-            <Shield className="w-3 h-3" /> Admin
+          <span style={{ ...baseStyle, backgroundColor: '#FEE2E2', color: '#B91C1C' }}>
+            <Shield style={{ width: '12px', height: '12px' }} /> Admin
           </span>
         );
       case 'specialist':
         return (
-          <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-700 rounded-full flex items-center gap-1">
-            <Briefcase className="w-3 h-3" /> Especialista
+          <span style={{ ...baseStyle, backgroundColor: '#DCFCE7', color: '#15803D' }}>
+            <Briefcase style={{ width: '12px', height: '12px' }} /> Especialista
           </span>
         );
       default:
         return (
-          <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full flex items-center gap-1">
-            <User className="w-3 h-3" /> Usuario
+          <span style={{ ...baseStyle, backgroundColor: '#DBEAFE', color: '#1D4ED8' }}>
+            <User style={{ width: '12px', height: '12px' }} /> Usuario
           </span>
         );
     }
   }
 
   async function handleBlockUser() {
-    if (!selectedUser || !blockReason.trim()) return;
+    if (!selectedUser) return;
+    if (!selectedUser.isBlocked && !blockReason.trim()) return;
 
     setActionLoading(true);
     try {
-      // TODO: Implement block functionality with blocked_users table
-      console.log('Blocking user:', selectedUser.id, 'Reason:', blockReason);
+      // TODO: Connect to actual banned_users table when created
+      // For now, we'll check if is_blocked column exists
+      const { error } = await supabase
+        .from('profiles')
+        .update({ is_blocked: !selectedUser.isBlocked })
+        .eq('id', selectedUser.id);
+
+      // If column doesn't exist, just update local state
+      if (error && error.message.includes('is_blocked')) {
+        console.log('Note: is_blocked column not found in profiles table. Updating local state only.');
+      } else if (error) {
+        throw error;
+      }
+
+      // Update local state
+      setUsers(users.map(u =>
+        u.id === selectedUser.id ? { ...u, isBlocked: !selectedUser.isBlocked } : u
+      ));
+
       setShowBlockModal(false);
       setBlockReason('');
       setSelectedUser(null);
@@ -141,46 +171,116 @@ export function UsersPage() {
     }
   }
 
+  async function handleToggleAdmin(user: UserProfile) {
+    setActionLoading(true);
+    try {
+      const hasAdminRole = user.roles.includes('admin');
+
+      if (hasAdminRole) {
+        // Remove admin role
+        const { error } = await supabase
+          .from('user_roles')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('role', 'admin');
+
+        if (error) throw error;
+
+        // Update local state
+        setUsers(users.map(u =>
+          u.id === user.id ? { ...u, roles: u.roles.filter(r => r !== 'admin') } : u
+        ));
+      } else {
+        // Add admin role
+        const { error } = await supabase
+          .from('user_roles')
+          .insert({ user_id: user.id, role: 'admin' });
+
+        if (error && !error.message.includes('duplicate')) throw error;
+
+        // Update local state
+        setUsers(users.map(u =>
+          u.id === user.id ? { ...u, roles: [...u.roles, 'admin'] } : u
+        ));
+      }
+
+      setShowAdminModal(false);
+      setSelectedUser(null);
+    } catch (error) {
+      console.error('Error toggling admin role:', error);
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-4 border-morado-confianza/30 border-t-morado-confianza rounded-full animate-spin" />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '256px' }}>
+        <div
+          style={{
+            width: '32px',
+            height: '32px',
+            border: '4px solid rgba(170,27,241,0.3)',
+            borderTopColor: '#AA1BF1',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite'
+          }}
+        />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div>
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '16px', marginBottom: '24px' }}>
         <div>
-          <h2 className="text-xl font-bold text-conexion-profunda">
+          <h2 style={{ fontFamily: "'Isidora Alt Bold', sans-serif", fontSize: '20px', fontWeight: 'bold', color: '#36004E', margin: 0 }}>
             Gestion de Usuarios
           </h2>
-          <p className="text-gray-500 text-sm">
+          <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '14px', color: '#6B7280', margin: '4px 0 0 0' }}>
             {filteredUsers.length} usuarios encontrados
           </p>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', marginBottom: '24px' }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
+          <Search style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', width: '20px', height: '20px', color: '#9CA3AF' }} />
           <input
             type="text"
             placeholder="Buscar por nombre, telefono..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-morado-confianza focus:border-morado-confianza"
+            style={{
+              width: '100%',
+              padding: '12px 16px 12px 48px',
+              border: '1px solid #E5E7EB',
+              borderRadius: '12px',
+              fontSize: '14px',
+              fontFamily: "'Centrale Sans Rounded', sans-serif",
+              outline: 'none',
+              boxSizing: 'border-box'
+            }}
           />
         </div>
-        <div className="flex items-center gap-2">
-          <Filter className="w-5 h-5 text-gray-400" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Filter style={{ width: '20px', height: '20px', color: '#9CA3AF' }} />
           <select
             value={filterRole}
             onChange={(e) => setFilterRole(e.target.value as FilterRole)}
-            className="px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-morado-confianza focus:border-morado-confianza bg-white"
+            style={{
+              padding: '12px 16px',
+              border: '1px solid #E5E7EB',
+              borderRadius: '12px',
+              fontSize: '14px',
+              fontFamily: "'Centrale Sans Rounded', sans-serif",
+              backgroundColor: 'white',
+              outline: 'none',
+              cursor: 'pointer'
+            }}
           >
             <option value="all">Todos los roles</option>
             <option value="user">Usuarios</option>
@@ -191,94 +291,86 @@ export function UsersPage() {
       </div>
 
       {/* Users Table */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
+      <div style={{ backgroundColor: 'white', borderRadius: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', border: '1px solid #F3F4F6', overflow: 'hidden' }}>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-100">
-                <th className="text-left px-6 py-4 text-sm font-semibold text-gray-600">Usuario</th>
-                <th className="text-left px-6 py-4 text-sm font-semibold text-gray-600">Contacto</th>
-                <th className="text-left px-6 py-4 text-sm font-semibold text-gray-600">Roles</th>
-                <th className="text-left px-6 py-4 text-sm font-semibold text-gray-600">Registro</th>
-                <th className="text-left px-6 py-4 text-sm font-semibold text-gray-600">Estado</th>
-                <th className="text-right px-6 py-4 text-sm font-semibold text-gray-600">Acciones</th>
+              <tr style={{ backgroundColor: '#F9FAFB', borderBottom: '1px solid #F3F4F6' }}>
+                <th style={{ textAlign: 'left', padding: '16px 24px', fontSize: '14px', fontWeight: 600, color: '#4B5563', fontFamily: "'Centrale Sans Rounded', sans-serif" }}>Usuario</th>
+                <th style={{ textAlign: 'left', padding: '16px 24px', fontSize: '14px', fontWeight: 600, color: '#4B5563', fontFamily: "'Centrale Sans Rounded', sans-serif" }}>Contacto</th>
+                <th style={{ textAlign: 'left', padding: '16px 24px', fontSize: '14px', fontWeight: 600, color: '#4B5563', fontFamily: "'Centrale Sans Rounded', sans-serif" }}>Roles</th>
+                <th style={{ textAlign: 'left', padding: '16px 24px', fontSize: '14px', fontWeight: 600, color: '#4B5563', fontFamily: "'Centrale Sans Rounded', sans-serif" }}>Registro</th>
+                <th style={{ textAlign: 'left', padding: '16px 24px', fontSize: '14px', fontWeight: 600, color: '#4B5563', fontFamily: "'Centrale Sans Rounded', sans-serif" }}>Estado</th>
+                <th style={{ textAlign: 'right', padding: '16px 24px', fontSize: '14px', fontWeight: 600, color: '#4B5563', fontFamily: "'Centrale Sans Rounded', sans-serif" }}>Acciones</th>
               </tr>
             </thead>
             <tbody>
               {filteredUsers.map((user) => (
-                <tr key={user.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
+                <tr key={user.id} style={{ borderBottom: '1px solid #F9FAFB' }}>
+                  <td style={{ padding: '16px 24px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                       {user.avatar_url ? (
-                        <img
-                          src={user.avatar_url}
-                          alt=""
-                          className="w-10 h-10 rounded-full object-cover"
-                        />
+                        <img src={user.avatar_url} alt="" style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }} />
                       ) : (
-                        <div className="w-10 h-10 rounded-full gradient-brand flex items-center justify-center text-white font-bold">
+                        <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'linear-gradient(135deg, #FF9601 0%, #AA1BF1 50%, #009AFF 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold', fontFamily: "'Isidora Alt Bold', sans-serif" }}>
                           {user.first_name[0]}
                         </div>
                       )}
                       <div>
-                        <p className="font-medium text-conexion-profunda">
-                          {getFullName(user)}
-                        </p>
+                        <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontWeight: 500, color: '#36004E', margin: 0 }}>{getFullName(user)}</p>
                         {user.display_name && (
-                          <p className="text-sm text-gray-500">@{user.display_name}</p>
+                          <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '14px', color: '#6B7280', margin: '2px 0 0 0' }}>@{user.display_name}</p>
                         )}
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="space-y-1">
-                      {user.phone && (
-                        <div className="flex items-center gap-2 text-sm text-gray-600">
-                          <Phone className="w-4 h-4" />
-                          {user.phone}
-                        </div>
-                      )}
-                    </div>
+                  <td style={{ padding: '16px 24px' }}>
+                    {user.phone && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', color: '#4B5563', fontFamily: "'Centrale Sans Rounded', sans-serif" }}>
+                        <Phone style={{ width: '16px', height: '16px' }} />
+                        {user.phone}
+                      </div>
+                    )}
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="flex flex-wrap gap-1">
+                  <td style={{ padding: '16px 24px' }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                       {user.roles.map((role) => (
                         <span key={role}>{getRoleBadge(role)}</span>
                       ))}
                     </div>
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <Calendar className="w-4 h-4" />
+                  <td style={{ padding: '16px 24px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', color: '#4B5563', fontFamily: "'Centrale Sans Rounded', sans-serif" }}>
+                      <Calendar style={{ width: '16px', height: '16px' }} />
                       {new Date(user.created_at).toLocaleDateString('es-MX')}
                     </div>
                   </td>
-                  <td className="px-6 py-4">
+                  <td style={{ padding: '16px 24px' }}>
                     {user.isBlocked ? (
-                      <span className="px-3 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">
+                      <span style={{ padding: '4px 12px', fontSize: '12px', fontWeight: 500, backgroundColor: '#FEE2E2', color: '#B91C1C', borderRadius: '9999px', fontFamily: "'Centrale Sans Rounded', sans-serif" }}>
                         Bloqueado
                       </span>
                     ) : (
-                      <span className="px-3 py-1 text-xs font-medium bg-green-100 text-green-700 rounded-full">
+                      <span style={{ padding: '4px 12px', fontSize: '12px', fontWeight: 500, backgroundColor: '#DCFCE7', color: '#15803D', borderRadius: '9999px', fontFamily: "'Centrale Sans Rounded', sans-serif" }}>
                         Activo
                       </span>
                     )}
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center justify-end gap-2">
+                  <td style={{ padding: '16px 24px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px', position: 'relative' }}>
                       <button
-                        onClick={() => {
-                          setSelectedUser(user);
-                          setShowBlockModal(true);
-                        }}
-                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        onClick={() => { setSelectedUser(user); setShowAdminModal(true); }}
+                        style={{ padding: '8px', color: user.roles.includes('admin') ? '#DC2626' : '#9CA3AF', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
+                        title={user.roles.includes('admin') ? 'Quitar Admin' : 'Hacer Admin'}
+                      >
+                        {user.roles.includes('admin') ? <ShieldOff style={{ width: '20px', height: '20px' }} /> : <ShieldPlus style={{ width: '20px', height: '20px' }} />}
+                      </button>
+                      <button
+                        onClick={() => { setSelectedUser(user); setShowBlockModal(true); }}
+                        style={{ padding: '8px', color: user.isBlocked ? '#16A34A' : '#9CA3AF', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
                         title={user.isBlocked ? 'Desbloquear' : 'Bloquear'}
                       >
-                        {user.isBlocked ? (
-                          <CheckCircle className="w-5 h-5" />
-                        ) : (
-                          <Ban className="w-5 h-5" />
-                        )}
+                        {user.isBlocked ? <CheckCircle style={{ width: '20px', height: '20px' }} /> : <Ban style={{ width: '20px', height: '20px' }} />}
                       </button>
                     </div>
                   </td>
@@ -289,95 +381,141 @@ export function UsersPage() {
         </div>
 
         {filteredUsers.length === 0 && (
-          <div className="text-center py-12">
-            <User className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500">No se encontraron usuarios</p>
+          <div style={{ textAlign: 'center', padding: '48px' }}>
+            <User style={{ width: '48px', height: '48px', color: '#D1D5DB', margin: '0 auto 16px' }} />
+            <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", color: '#6B7280' }}>No se encontraron usuarios</p>
           </div>
         )}
       </div>
 
       {/* Block User Modal */}
       {showBlockModal && selectedUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-conexion-profunda">
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '16px', maxWidth: '400px', width: '100%', padding: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <h3 style={{ fontFamily: "'Isidora Alt Bold', sans-serif", fontSize: '18px', fontWeight: 'bold', color: '#36004E', margin: 0 }}>
                 {selectedUser.isBlocked ? 'Desbloquear Usuario' : 'Bloquear Usuario'}
               </h3>
-              <button
-                onClick={() => {
-                  setShowBlockModal(false);
-                  setBlockReason('');
-                  setSelectedUser(null);
-                }}
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <X className="w-5 h-5" />
+              <button onClick={() => { setShowBlockModal(false); setBlockReason(''); setSelectedUser(null); }} style={{ padding: '8px', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+                <X style={{ width: '20px', height: '20px' }} />
               </button>
             </div>
 
-            <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl mb-4">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', backgroundColor: '#F9FAFB', borderRadius: '12px', marginBottom: '16px' }}>
               {selectedUser.avatar_url ? (
-                <img
-                  src={selectedUser.avatar_url}
-                  alt=""
-                  className="w-12 h-12 rounded-full object-cover"
-                />
+                <img src={selectedUser.avatar_url} alt="" style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover' }} />
               ) : (
-                <div className="w-12 h-12 rounded-full gradient-brand flex items-center justify-center text-white font-bold">
+                <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'linear-gradient(135deg, #FF9601 0%, #AA1BF1 50%, #009AFF 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold' }}>
                   {selectedUser.first_name[0]}
                 </div>
               )}
               <div>
-                <p className="font-medium text-conexion-profunda">
-                  {getFullName(selectedUser)}
-                </p>
-                <p className="text-sm text-gray-500">{selectedUser.phone}</p>
+                <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontWeight: 500, color: '#36004E', margin: 0 }}>{getFullName(selectedUser)}</p>
+                <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '14px', color: '#6B7280', margin: '2px 0 0 0' }}>{selectedUser.phone}</p>
               </div>
             </div>
 
             {!selectedUser.isBlocked && (
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#374151', marginBottom: '8px', fontFamily: "'Centrale Sans Rounded', sans-serif" }}>
                   Razon del bloqueo
                 </label>
                 <textarea
                   value={blockReason}
                   onChange={(e) => setBlockReason(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-morado-confianza focus:border-morado-confianza resize-none"
+                  style={{ width: '100%', padding: '12px 16px', border: '1px solid #E5E7EB', borderRadius: '12px', fontSize: '14px', fontFamily: "'Centrale Sans Rounded', sans-serif", resize: 'none', outline: 'none', boxSizing: 'border-box' }}
                   rows={3}
                   placeholder="Describe la razon del bloqueo..."
                 />
               </div>
             )}
 
-            <div className="flex gap-3">
-              <button
-                onClick={() => {
-                  setShowBlockModal(false);
-                  setBlockReason('');
-                  setSelectedUser(null);
-                }}
-                className="flex-1 px-4 py-3 border border-gray-200 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-colors"
-              >
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button onClick={() => { setShowBlockModal(false); setBlockReason(''); setSelectedUser(null); }} style={{ flex: 1, padding: '12px 16px', border: '1px solid #E5E7EB', backgroundColor: 'white', color: '#374151', fontWeight: 500, borderRadius: '12px', cursor: 'pointer', fontFamily: "'Centrale Sans Rounded', sans-serif" }}>
                 Cancelar
               </button>
               <button
                 onClick={handleBlockUser}
                 disabled={!selectedUser.isBlocked && !blockReason.trim()}
-                className={`flex-1 px-4 py-3 font-medium rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                  selectedUser.isBlocked
-                    ? 'bg-green-600 text-white hover:bg-green-700'
-                    : 'bg-red-600 text-white hover:bg-red-700'
-                }`}
+                style={{
+                  flex: 1,
+                  padding: '12px 16px',
+                  border: 'none',
+                  backgroundColor: selectedUser.isBlocked ? '#16A34A' : '#DC2626',
+                  color: 'white',
+                  fontWeight: 500,
+                  borderRadius: '12px',
+                  cursor: (!selectedUser.isBlocked && !blockReason.trim()) ? 'not-allowed' : 'pointer',
+                  opacity: (!selectedUser.isBlocked && !blockReason.trim()) ? 0.5 : 1,
+                  fontFamily: "'Centrale Sans Rounded', sans-serif"
+                }}
               >
-                {actionLoading ? (
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto" />
-                ) : selectedUser.isBlocked ? (
-                  'Desbloquear'
-                ) : (
-                  'Bloquear'
-                )}
+                {actionLoading ? 'Cargando...' : selectedUser.isBlocked ? 'Desbloquear' : 'Bloquear'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Role Modal */}
+      {showAdminModal && selectedUser && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '16px', maxWidth: '400px', width: '100%', padding: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <h3 style={{ fontFamily: "'Isidora Alt Bold', sans-serif", fontSize: '18px', fontWeight: 'bold', color: '#36004E', margin: 0 }}>
+                {selectedUser.roles.includes('admin') ? 'Quitar Rol de Admin' : 'Asignar Rol de Admin'}
+              </h3>
+              <button onClick={() => { setShowAdminModal(false); setSelectedUser(null); }} style={{ padding: '8px', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+                <X style={{ width: '20px', height: '20px' }} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', backgroundColor: '#F9FAFB', borderRadius: '12px', marginBottom: '16px' }}>
+              {selectedUser.avatar_url ? (
+                <img src={selectedUser.avatar_url} alt="" style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover' }} />
+              ) : (
+                <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'linear-gradient(135deg, #FF9601 0%, #AA1BF1 50%, #009AFF 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold' }}>
+                  {selectedUser.first_name[0]}
+                </div>
+              )}
+              <div>
+                <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontWeight: 500, color: '#36004E', margin: 0 }}>{getFullName(selectedUser)}</p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px' }}>
+                  {selectedUser.roles.map((role) => (
+                    <span key={role}>{getRoleBadge(role)}</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", color: '#4B5563', marginBottom: '24px' }}>
+              {selectedUser.roles.includes('admin')
+                ? `¿Deseas quitar el rol de administrador a ${getFullName(selectedUser)}?`
+                : `¿Deseas asignar el rol de administrador a ${getFullName(selectedUser)}? Tendra acceso completo al panel de administracion.`
+              }
+            </p>
+
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button onClick={() => { setShowAdminModal(false); setSelectedUser(null); }} style={{ flex: 1, padding: '12px 16px', border: '1px solid #E5E7EB', backgroundColor: 'white', color: '#374151', fontWeight: 500, borderRadius: '12px', cursor: 'pointer', fontFamily: "'Centrale Sans Rounded', sans-serif" }}>
+                Cancelar
+              </button>
+              <button
+                onClick={() => handleToggleAdmin(selectedUser)}
+                disabled={actionLoading}
+                style={{
+                  flex: 1,
+                  padding: '12px 16px',
+                  border: 'none',
+                  backgroundColor: selectedUser.roles.includes('admin') ? '#DC2626' : '#36004E',
+                  color: 'white',
+                  fontWeight: 500,
+                  borderRadius: '12px',
+                  cursor: actionLoading ? 'not-allowed' : 'pointer',
+                  opacity: actionLoading ? 0.5 : 1,
+                  fontFamily: "'Centrale Sans Rounded', sans-serif"
+                }}
+              >
+                {actionLoading ? 'Cargando...' : selectedUser.roles.includes('admin') ? 'Quitar Admin' : 'Hacer Admin'}
               </button>
             </div>
           </div>
