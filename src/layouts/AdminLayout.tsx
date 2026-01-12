@@ -31,12 +31,16 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   const { profile, signOut } = useAuth();
 
   const handleSignOut = async () => {
+    console.log('handleSignOut called');
     try {
+      console.log('Calling signOut...');
       await signOut();
+      console.log('signOut completed, navigating to /login');
       navigate('/login');
     } catch (error) {
       console.error('Error signing out:', error);
       // Force redirect to login even if signOut fails
+      console.log('Error occurred, forcing navigation to /login');
       navigate('/login');
     }
   };
@@ -264,7 +268,8 @@ export function AdminLayout({ children }: AdminLayoutProps) {
         <div
           style={{
             padding: '16px',
-            borderTop: '1px solid rgba(255,255,255,0.1)'
+            borderTop: '1px solid rgba(255,255,255,0.1)',
+            pointerEvents: 'auto'
           }}
         >
           <div
@@ -322,10 +327,12 @@ export function AdminLayout({ children }: AdminLayoutProps) {
             )}
           </div>
           <button
-            onClick={(e) => {
+            type="button"
+            onClick={async (e) => {
               e.preventDefault();
               e.stopPropagation();
-              handleSignOut();
+              console.log('Logout button clicked');
+              await handleSignOut();
             }}
             style={{
               marginTop: '16px',
