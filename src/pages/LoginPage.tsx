@@ -29,83 +29,205 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex">
+    <div style={{ minHeight: '100vh', display: 'flex' }}>
       {/* Left side - Gradient background */}
-      <div className="hidden lg:flex lg:w-1/2 gradient-brand items-center justify-center p-12">
-        <div className="max-w-md text-center text-white">
+      <div
+        style={{
+          display: 'none',
+          width: '50%',
+          background: 'linear-gradient(135deg, #FF9601 0%, #AA1BF1 50%, #009AFF 100%)',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '48px'
+        }}
+        className="lg:flex"
+      >
+        <div style={{ maxWidth: '400px', textAlign: 'center', color: 'white' }}>
           <img
             src="/images/logo.png"
             alt="Enlazo"
-            className="h-16 mx-auto mb-8 brightness-0 invert"
+            style={{
+              height: '80px',
+              margin: '0 auto 32px',
+              filter: 'brightness(0) invert(1)'
+            }}
           />
-          <h1 className="text-4xl font-bold mb-4">Panel de Administracion</h1>
-          <p className="text-white/80 text-lg">
+          <h1 style={{
+            fontFamily: "'Isidora Alt Bold', sans-serif",
+            fontSize: '36px',
+            fontWeight: 'bold',
+            marginBottom: '16px'
+          }}>
+            Panel de Administracion
+          </h1>
+          <p style={{
+            fontFamily: "'Centrale Sans Rounded', sans-serif",
+            fontSize: '18px',
+            opacity: 0.9
+          }}>
             Gestiona usuarios, especialistas y servicios de la plataforma Enlazo
           </p>
         </div>
       </div>
 
       {/* Right side - Login form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-white">
-        <div className="w-full max-w-md">
+      <div
+        style={{
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '32px',
+          backgroundColor: 'white'
+        }}
+        className="lg:w-1/2"
+      >
+        <div style={{ width: '100%', maxWidth: '420px' }}>
           {/* Mobile logo */}
-          <div className="lg:hidden text-center mb-8">
-            <img src="/images/logo.png" alt="Enlazo" className="h-12 mx-auto mb-4" />
-            <h1 className="text-2xl font-bold text-conexion-profunda">
+          <div className="lg:hidden" style={{ textAlign: 'center', marginBottom: '40px' }}>
+            <img
+              src="/images/logo.png"
+              alt="Enlazo"
+              style={{ height: '60px', margin: '0 auto 16px' }}
+            />
+            <h1 style={{
+              fontFamily: "'Isidora Alt Bold', sans-serif",
+              fontSize: '24px',
+              fontWeight: 'bold',
+              color: '#36004E'
+            }}>
               Panel de Administracion
             </h1>
           </div>
 
-          <div className="lg:block hidden">
-            <h2 className="text-3xl font-bold text-conexion-profunda mb-2">
+          <div className="hidden lg:block" style={{ marginBottom: '32px' }}>
+            <h2 style={{
+              fontFamily: "'Isidora Alt Bold', sans-serif",
+              fontSize: '32px',
+              fontWeight: 'bold',
+              color: '#36004E',
+              marginBottom: '8px'
+            }}>
               Bienvenido
             </h2>
-            <p className="text-gray-500 mb-8">
+            <p style={{
+              fontFamily: "'Centrale Sans Rounded', sans-serif",
+              fontSize: '16px',
+              color: '#6B7280'
+            }}>
               Ingresa tus credenciales para acceder al panel
             </p>
           </div>
 
           {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-700">
-              <AlertCircle className="w-5 h-5 flex-shrink-0" />
-              <p className="text-sm">{error}</p>
+            <div style={{
+              marginBottom: '24px',
+              padding: '16px',
+              backgroundColor: '#FEF2F2',
+              border: '1px solid #FECACA',
+              borderRadius: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              color: '#DC2626'
+            }}>
+              <AlertCircle style={{ width: '20px', height: '20px', flexShrink: 0 }} />
+              <p style={{
+                fontFamily: "'Centrale Sans Rounded', sans-serif",
+                fontSize: '14px'
+              }}>{error}</p>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+          <form onSubmit={handleSubmit}>
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{
+                display: 'block',
+                fontFamily: "'Centrale Sans Rounded', sans-serif",
+                fontSize: '14px',
+                fontWeight: 600,
+                color: '#36004E',
+                marginBottom: '8px'
+              }}>
                 Correo electronico
               </label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-morado-confianza focus:border-morado-confianza transition-colors"
+                style={{
+                  width: '100%',
+                  padding: '14px 18px',
+                  fontFamily: "'Centrale Sans Rounded', sans-serif",
+                  fontSize: '16px',
+                  color: '#36004E',
+                  backgroundColor: '#F9FAFB',
+                  border: '2px solid #E5E7EB',
+                  borderRadius: '12px',
+                  outline: 'none',
+                  transition: 'border-color 0.2s',
+                  boxSizing: 'border-box'
+                }}
+                onFocus={(e) => e.target.style.borderColor = '#AA1BF1'}
+                onBlur={(e) => e.target.style.borderColor = '#E5E7EB'}
                 placeholder="admin@enlazo.com"
                 required
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+            <div style={{ marginBottom: '32px' }}>
+              <label style={{
+                display: 'block',
+                fontFamily: "'Centrale Sans Rounded', sans-serif",
+                fontSize: '14px',
+                fontWeight: 600,
+                color: '#36004E',
+                marginBottom: '8px'
+              }}>
                 Contrasena
               </label>
-              <div className="relative">
+              <div style={{ position: 'relative' }}>
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-morado-confianza focus:border-morado-confianza transition-colors pr-12"
-                  placeholder="********"
+                  style={{
+                    width: '100%',
+                    padding: '14px 50px 14px 18px',
+                    fontFamily: "'Centrale Sans Rounded', sans-serif",
+                    fontSize: '16px',
+                    color: '#36004E',
+                    backgroundColor: '#F9FAFB',
+                    border: '2px solid #E5E7EB',
+                    borderRadius: '12px',
+                    outline: 'none',
+                    transition: 'border-color 0.2s',
+                    boxSizing: 'border-box'
+                  }}
+                  onFocus={(e) => e.target.style.borderColor = '#AA1BF1'}
+                  onBlur={(e) => e.target.style.borderColor = '#E5E7EB'}
+                  placeholder="••••••••"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  style={{
+                    position: 'absolute',
+                    right: '16px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: '#9CA3AF',
+                    padding: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
                 >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  {showPassword ? <EyeOff style={{ width: '20px', height: '20px' }} /> : <Eye style={{ width: '20px', height: '20px' }} />}
                 </button>
               </div>
             </div>
@@ -113,24 +235,79 @@ export function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 px-4 bg-conexion-profunda text-white font-medium rounded-xl hover:bg-conexion-profunda/90 focus:ring-4 focus:ring-conexion-profunda/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              style={{
+                width: '100%',
+                padding: '16px 24px',
+                fontFamily: "'Centrale Sans Rounded', sans-serif",
+                fontSize: '16px',
+                fontWeight: 600,
+                color: 'white',
+                backgroundColor: '#36004E',
+                border: 'none',
+                borderRadius: '12px',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                opacity: loading ? 0.6 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '10px',
+                boxShadow: '0 4px 14px rgba(54, 0, 78, 0.25)',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={(e) => {
+                if (!loading) {
+                  e.currentTarget.style.backgroundColor = '#4a0068';
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(54, 0, 78, 0.35)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = '#36004E';
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 4px 14px rgba(54, 0, 78, 0.25)';
+              }}
             >
               {loading ? (
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <div style={{
+                  width: '20px',
+                  height: '20px',
+                  border: '2px solid rgba(255,255,255,0.3)',
+                  borderTopColor: 'white',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite'
+                }} />
               ) : (
                 <>
-                  <LogIn className="w-5 h-5" />
+                  <LogIn style={{ width: '20px', height: '20px' }} />
                   Iniciar sesion
                 </>
               )}
             </button>
           </form>
 
-          <p className="mt-8 text-center text-sm text-gray-500">
+          <p style={{
+            marginTop: '32px',
+            textAlign: 'center',
+            fontFamily: "'Centrale Sans Rounded', sans-serif",
+            fontSize: '14px',
+            color: '#9CA3AF'
+          }}>
             Solo usuarios con rol de administrador pueden acceder
           </p>
         </div>
       </div>
+
+      <style>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+        @media (min-width: 1024px) {
+          .lg\\:flex { display: flex !important; }
+          .lg\\:w-1\\/2 { width: 50% !important; }
+          .lg\\:hidden { display: none !important; }
+          .lg\\:block { display: block !important; }
+        }
+      `}</style>
     </div>
   );
 }
