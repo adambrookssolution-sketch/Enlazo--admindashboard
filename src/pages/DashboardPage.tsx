@@ -6,8 +6,6 @@ import {
   MessageSquareQuote,
   CheckCircle,
   Clock,
-  TrendingUp,
-  TrendingDown,
   Activity
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -28,31 +26,66 @@ interface StatCardProps {
   title: string;
   value: number;
   icon: React.ReactNode;
-  color: string;
-  trend?: number;
+  bgColor: string;
   subtitle?: string;
 }
 
-function StatCard({ title, value, icon, color, trend, subtitle }: StatCardProps) {
+function StatCard({ title, value, icon, bgColor, subtitle }: StatCardProps) {
   return (
-    <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-      <div className="flex items-start justify-between">
+    <div
+      style={{
+        backgroundColor: 'white',
+        borderRadius: '16px',
+        padding: '24px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+        border: '1px solid #F3F4F6',
+        transition: 'box-shadow 0.2s'
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <div>
-          <p className="text-gray-500 text-sm font-medium">{title}</p>
-          <p className="text-3xl font-bold text-conexion-profunda mt-2">
+          <p
+            style={{
+              fontFamily: "'Centrale Sans Rounded', sans-serif",
+              fontSize: '14px',
+              fontWeight: 500,
+              color: '#6B7280',
+              margin: 0
+            }}
+          >
+            {title}
+          </p>
+          <p
+            style={{
+              fontFamily: "'Isidora Alt Bold', sans-serif",
+              fontSize: '32px',
+              fontWeight: 'bold',
+              color: '#36004E',
+              margin: '8px 0 0 0'
+            }}
+          >
             {value.toLocaleString()}
           </p>
           {subtitle && (
-            <p className="text-gray-400 text-sm mt-1">{subtitle}</p>
-          )}
-          {trend !== undefined && (
-            <div className={`flex items-center gap-1 mt-2 text-sm ${trend >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {trend >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-              <span>{Math.abs(trend)}% vs mes anterior</span>
-            </div>
+            <p
+              style={{
+                fontFamily: "'Centrale Sans Rounded', sans-serif",
+                fontSize: '13px',
+                color: '#9CA3AF',
+                margin: '4px 0 0 0'
+              }}
+            >
+              {subtitle}
+            </p>
           )}
         </div>
-        <div className={`p-3 rounded-xl ${color}`}>
+        <div
+          style={{
+            padding: '12px',
+            borderRadius: '12px',
+            backgroundColor: bgColor
+          }}
+        >
           {icon}
         </div>
       </div>
@@ -100,15 +133,25 @@ export function DashboardPage() {
         quotesResult,
         acceptedQuotesResult,
       ] = await Promise.all([
-        supabase.from('profiles').select('id', { count: 'exact', head: true }),
-        supabase.from('specialist_profiles').select('id', { count: 'exact', head: true }).eq('status', 'approved'),
-        supabase.from('specialist_profiles').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-        supabase.from('service_requests').select('id', { count: 'exact', head: true }),
-        supabase.from('service_requests').select('id', { count: 'exact', head: true }).eq('status', 'active'),
-        supabase.from('service_requests').select('id', { count: 'exact', head: true }).eq('status', 'completed'),
-        supabase.from('quotes').select('id', { count: 'exact', head: true }),
-        supabase.from('quotes').select('id', { count: 'exact', head: true }).eq('status', 'accepted'),
+        supabase.from('profiles').select('*', { count: 'exact', head: true }),
+        supabase.from('specialist_profiles').select('*', { count: 'exact', head: true }).eq('status', 'approved'),
+        supabase.from('specialist_profiles').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+        supabase.from('service_requests').select('*', { count: 'exact', head: true }),
+        supabase.from('service_requests').select('*', { count: 'exact', head: true }).eq('status', 'active'),
+        supabase.from('service_requests').select('*', { count: 'exact', head: true }).eq('status', 'completed'),
+        supabase.from('quotes').select('*', { count: 'exact', head: true }),
+        supabase.from('quotes').select('*', { count: 'exact', head: true }).eq('status', 'accepted'),
       ]);
+
+      // Log errors for debugging
+      if (usersResult.error) console.error('Users error:', usersResult.error);
+      if (specialistsResult.error) console.error('Specialists error:', specialistsResult.error);
+      if (pendingSpecialistsResult.error) console.error('Pending specialists error:', pendingSpecialistsResult.error);
+      if (requestsResult.error) console.error('Requests error:', requestsResult.error);
+      if (activeRequestsResult.error) console.error('Active requests error:', activeRequestsResult.error);
+      if (completedRequestsResult.error) console.error('Completed requests error:', completedRequestsResult.error);
+      if (quotesResult.error) console.error('Quotes error:', quotesResult.error);
+      if (acceptedQuotesResult.error) console.error('Accepted quotes error:', acceptedQuotesResult.error);
 
       setStats({
         totalUsers: usersResult.count || 0,
@@ -130,14 +173,12 @@ export function DashboardPage() {
 
   async function loadRecentActivity() {
     try {
-      // Load recent specialists
       const { data: recentSpecialists } = await supabase
         .from('specialist_profiles')
         .select('id, created_at, status, user_id')
         .order('created_at', { ascending: false })
         .limit(3);
 
-      // Load recent requests
       const { data: recentRequests } = await supabase
         .from('service_requests')
         .select('id, created_at, activity, status')
@@ -166,7 +207,6 @@ export function DashboardPage() {
         });
       });
 
-      // Sort by time
       activities.sort((a, b) => {
         return new Date(b.time).getTime() - new Date(a.time).getTime();
       });
@@ -193,101 +233,218 @@ export function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-4 border-morado-confianza/30 border-t-morado-confianza rounded-full animate-spin" />
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '256px'
+        }}
+      >
+        <div
+          style={{
+            width: '32px',
+            height: '32px',
+            border: '4px solid rgba(170,27,241,0.3)',
+            borderTopColor: '#AA1BF1',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite'
+          }}
+        />
+        <style>{`
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    <div>
+      {/* Stats Grid - Primary */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+          gap: '24px',
+          marginBottom: '32px'
+        }}
+      >
         <StatCard
           title="Total Usuarios"
           value={stats.totalUsers}
-          icon={<Users className="w-6 h-6 text-white" />}
-          color="bg-azul-alcance"
+          icon={<Users style={{ width: '24px', height: '24px', color: 'white' }} />}
+          bgColor="#009AFF"
         />
         <StatCard
           title="Especialistas Aprobados"
           value={stats.approvedSpecialists}
-          icon={<UserCheck className="w-6 h-6 text-white" />}
-          color="bg-green-500"
+          icon={<UserCheck style={{ width: '24px', height: '24px', color: 'white' }} />}
+          bgColor="#22C55E"
           subtitle={`${stats.pendingSpecialists} pendientes`}
         />
         <StatCard
           title="Solicitudes Activas"
           value={stats.activeRequests}
-          icon={<FileText className="w-6 h-6 text-white" />}
-          color="bg-enlace-vivo"
+          icon={<FileText style={{ width: '24px', height: '24px', color: 'white' }} />}
+          bgColor="#FF9601"
           subtitle={`${stats.totalRequests} total`}
         />
         <StatCard
           title="Cotizaciones"
           value={stats.totalQuotes}
-          icon={<MessageSquareQuote className="w-6 h-6 text-white" />}
-          color="bg-morado-confianza"
+          icon={<MessageSquareQuote style={{ width: '24px', height: '24px', color: 'white' }} />}
+          bgColor="#AA1BF1"
           subtitle={`${stats.acceptedQuotes} aceptadas`}
         />
       </div>
 
-      {/* Secondary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* Stats Grid - Secondary */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+          gap: '24px',
+          marginBottom: '32px'
+        }}
+      >
         <StatCard
           title="Trabajos Completados"
           value={stats.completedRequests}
-          icon={<CheckCircle className="w-6 h-6 text-white" />}
-          color="bg-green-600"
+          icon={<CheckCircle style={{ width: '24px', height: '24px', color: 'white' }} />}
+          bgColor="#16A34A"
         />
         <StatCard
           title="Especialistas Pendientes"
           value={stats.pendingSpecialists}
-          icon={<Clock className="w-6 h-6 text-white" />}
-          color="bg-yellow-500"
+          icon={<Clock style={{ width: '24px', height: '24px', color: 'white' }} />}
+          bgColor="#EAB308"
         />
         <StatCard
           title="Total Especialistas"
           value={stats.totalSpecialists}
-          icon={<Users className="w-6 h-6 text-white" />}
-          color="bg-conexion-profunda"
+          icon={<Users style={{ width: '24px', height: '24px', color: 'white' }} />}
+          bgColor="#36004E"
         />
       </div>
 
       {/* Recent Activity */}
-      <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 bg-morado-confianza/10 rounded-lg">
-            <Activity className="w-5 h-5 text-morado-confianza" />
+      <div
+        style={{
+          backgroundColor: 'white',
+          borderRadius: '16px',
+          padding: '24px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+          border: '1px solid #F3F4F6'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+          <div
+            style={{
+              padding: '10px',
+              backgroundColor: 'rgba(170,27,241,0.1)',
+              borderRadius: '10px'
+            }}
+          >
+            <Activity style={{ width: '20px', height: '20px', color: '#AA1BF1' }} />
           </div>
-          <h2 className="text-xl font-bold text-conexion-profunda">Actividad Reciente</h2>
+          <h2
+            style={{
+              fontFamily: "'Isidora Alt Bold', sans-serif",
+              fontSize: '20px',
+              fontWeight: 'bold',
+              color: '#36004E',
+              margin: 0
+            }}
+          >
+            Actividad Reciente
+          </h2>
         </div>
 
         {recentActivity.length === 0 ? (
-          <p className="text-gray-500 text-center py-8">No hay actividad reciente</p>
+          <p
+            style={{
+              fontFamily: "'Centrale Sans Rounded', sans-serif",
+              fontSize: '14px',
+              color: '#6B7280',
+              textAlign: 'center',
+              padding: '32px 0'
+            }}
+          >
+            No hay actividad reciente
+          </p>
         ) : (
-          <div className="space-y-4">
-            {recentActivity.map((item) => (
+          <div>
+            {recentActivity.map((item, index) => (
               <div
                 key={item.id}
-                className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '16px',
+                  padding: '16px',
+                  backgroundColor: '#F9FAFB',
+                  borderRadius: '12px',
+                  marginBottom: index < recentActivity.length - 1 ? '12px' : 0,
+                  transition: 'background-color 0.2s'
+                }}
               >
-                <div className={`p-2 rounded-lg ${
-                  item.type === 'specialist' ? 'bg-green-100 text-green-600' :
-                  item.type === 'request' ? 'bg-orange-100 text-orange-600' :
-                  item.type === 'user' ? 'bg-blue-100 text-blue-600' :
-                  'bg-purple-100 text-purple-600'
-                }`}>
-                  {item.type === 'specialist' ? <UserCheck className="w-5 h-5" /> :
-                   item.type === 'request' ? <FileText className="w-5 h-5" /> :
-                   item.type === 'user' ? <Users className="w-5 h-5" /> :
-                   <MessageSquareQuote className="w-5 h-5" />}
+                <div
+                  style={{
+                    padding: '10px',
+                    borderRadius: '10px',
+                    backgroundColor: item.type === 'specialist' ? '#DCFCE7' :
+                      item.type === 'request' ? '#FFEDD5' :
+                      item.type === 'user' ? '#DBEAFE' : '#F3E8FF'
+                  }}
+                >
+                  {item.type === 'specialist' ? (
+                    <UserCheck style={{ width: '20px', height: '20px', color: '#16A34A' }} />
+                  ) : item.type === 'request' ? (
+                    <FileText style={{ width: '20px', height: '20px', color: '#EA580C' }} />
+                  ) : item.type === 'user' ? (
+                    <Users style={{ width: '20px', height: '20px', color: '#2563EB' }} />
+                  ) : (
+                    <MessageSquareQuote style={{ width: '20px', height: '20px', color: '#9333EA' }} />
+                  )}
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-conexion-profunda truncate">{item.title}</p>
-                  <p className="text-sm text-gray-500">{item.subtitle}</p>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p
+                    style={{
+                      fontFamily: "'Centrale Sans Rounded', sans-serif",
+                      fontSize: '14px',
+                      fontWeight: 500,
+                      color: '#36004E',
+                      margin: 0,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {item.title}
+                  </p>
+                  <p
+                    style={{
+                      fontFamily: "'Centrale Sans Rounded', sans-serif",
+                      fontSize: '13px',
+                      color: '#6B7280',
+                      margin: '2px 0 0 0'
+                    }}
+                  >
+                    {item.subtitle}
+                  </p>
                 </div>
-                <span className="text-sm text-gray-400 flex-shrink-0">{item.time}</span>
+                <span
+                  style={{
+                    fontFamily: "'Centrale Sans Rounded', sans-serif",
+                    fontSize: '13px',
+                    color: '#9CA3AF',
+                    flexShrink: 0
+                  }}
+                >
+                  {item.time}
+                </span>
               </div>
             ))}
           </div>
