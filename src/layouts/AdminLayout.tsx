@@ -8,7 +8,7 @@ import {
   LogOut,
   Menu,
   X,
-  ChevronRight
+  ChevronLeft
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
@@ -38,39 +38,88 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   const currentPage = navItems.find(item => item.path === location.pathname);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div style={{ minHeight: '100vh', backgroundColor: '#F8F9FA' }}>
       {/* Mobile header */}
-      <header className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 px-4 py-3">
-        <div className="flex items-center justify-between">
-          <button
-            onClick={() => setMobileMenuOpen(true)}
-            className="p-2 rounded-lg hover:bg-gray-100"
-          >
-            <Menu className="w-6 h-6 text-conexion-profunda" />
-          </button>
-          <img src="/images/logo.png" alt="Enlazo" className="h-8" />
-          <div className="w-10" />
-        </div>
+      <header
+        className="lg:hidden"
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 50,
+          backgroundColor: 'white',
+          borderBottom: '1px solid #E5E7EB',
+          padding: '12px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}
+      >
+        <button
+          onClick={() => setMobileMenuOpen(true)}
+          style={{
+            padding: '8px',
+            borderRadius: '8px',
+            border: 'none',
+            backgroundColor: 'transparent',
+            cursor: 'pointer'
+          }}
+        >
+          <Menu style={{ width: '24px', height: '24px', color: '#36004E' }} />
+        </button>
+        <img src="/images/logo.png" alt="Enlazo" style={{ height: '32px' }} />
+        <div style={{ width: '40px' }} />
       </header>
 
       {/* Mobile sidebar overlay */}
       {mobileMenuOpen && (
-        <div className="lg:hidden fixed inset-0 z-50">
+        <div
+          className="lg:hidden"
+          style={{ position: 'fixed', inset: 0, zIndex: 50 }}
+        >
           <div
-            className="absolute inset-0 bg-black/50"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              backgroundColor: 'rgba(0,0,0,0.5)'
+            }}
             onClick={() => setMobileMenuOpen(false)}
           />
-          <aside className="absolute left-0 top-0 bottom-0 w-72 bg-conexion-profunda">
-            <div className="flex items-center justify-between p-4 border-b border-white/10">
-              <img src="/images/logo.png" alt="Enlazo" className="h-10" />
+          <aside
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: '288px',
+              backgroundColor: '#36004E'
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '16px',
+                borderBottom: '1px solid rgba(255,255,255,0.1)'
+              }}
+            >
+              <img src="/images/logo.png" alt="Enlazo" style={{ height: '40px', filter: 'brightness(0) invert(1)' }} />
               <button
                 onClick={() => setMobileMenuOpen(false)}
-                className="p-2 rounded-lg hover:bg-white/10"
+                style={{
+                  padding: '8px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  backgroundColor: 'transparent',
+                  cursor: 'pointer'
+                }}
               >
-                <X className="w-6 h-6 text-white" />
+                <X style={{ width: '24px', height: '24px', color: 'white' }} />
               </button>
             </div>
-            <nav className="p-4 space-y-2">
+            <nav style={{ padding: '16px' }}>
               {navItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = location.pathname === item.path;
@@ -79,14 +128,24 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                     key={item.path}
                     to={item.path}
                     onClick={() => setMobileMenuOpen(false)}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                      isActive
-                        ? 'bg-white text-conexion-profunda'
-                        : 'text-white/80 hover:bg-white/10 hover:text-white'
-                    }`}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '12px 16px',
+                      marginBottom: '8px',
+                      borderRadius: '12px',
+                      textDecoration: 'none',
+                      fontFamily: "'Centrale Sans Rounded', sans-serif",
+                      fontSize: '15px',
+                      fontWeight: 500,
+                      backgroundColor: isActive ? 'white' : 'transparent',
+                      color: isActive ? '#36004E' : 'rgba(255,255,255,0.8)',
+                      transition: 'all 0.2s'
+                    }}
                   >
-                    <Icon className="w-5 h-5" />
-                    <span className="font-medium">{item.label}</span>
+                    <Icon style={{ width: '20px', height: '20px' }} />
+                    <span>{item.label}</span>
                   </Link>
                 );
               })}
@@ -97,21 +156,41 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 
       {/* Desktop sidebar */}
       <aside
-        className={`hidden lg:flex fixed left-0 top-0 bottom-0 z-40 flex-col bg-conexion-profunda transition-all duration-300 ${
-          sidebarOpen ? 'w-64' : 'w-20'
-        }`}
+        className="hidden lg:flex"
+        style={{
+          position: 'fixed',
+          left: 0,
+          top: 0,
+          bottom: 0,
+          zIndex: 40,
+          flexDirection: 'column',
+          backgroundColor: '#36004E',
+          transition: 'width 0.3s ease',
+          width: sidebarOpen ? '256px' : '80px'
+        }}
       >
         {/* Logo */}
-        <div className="p-4 border-b border-white/10">
-          {sidebarOpen ? (
-            <img src="/images/logo.png" alt="Enlazo" className="h-10" />
-          ) : (
-            <img src="/images/logo-icon.png" alt="Enlazo" className="h-10 mx-auto" />
-          )}
+        <div
+          style={{
+            padding: '20px 16px',
+            borderBottom: '1px solid rgba(255,255,255,0.1)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: sidebarOpen ? 'flex-start' : 'center'
+          }}
+        >
+          <img
+            src="/images/logo.png"
+            alt="Enlazo"
+            style={{
+              height: '40px',
+              filter: 'brightness(0) invert(1)'
+            }}
+          />
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-2">
+        <nav style={{ flex: 1, padding: '16px' }}>
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
@@ -119,15 +198,27 @@ export function AdminLayout({ children }: AdminLayoutProps) {
               <Link
                 key={item.path}
                 to={item.path}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                  isActive
-                    ? 'bg-white text-conexion-profunda shadow-lg'
-                    : 'text-white/80 hover:bg-white/10 hover:text-white'
-                }`}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '12px 16px',
+                  marginBottom: '8px',
+                  borderRadius: '12px',
+                  textDecoration: 'none',
+                  fontFamily: "'Centrale Sans Rounded', sans-serif",
+                  fontSize: '15px',
+                  fontWeight: 500,
+                  backgroundColor: isActive ? 'white' : 'transparent',
+                  color: isActive ? '#36004E' : 'rgba(255,255,255,0.8)',
+                  boxShadow: isActive ? '0 4px 12px rgba(0,0,0,0.15)' : 'none',
+                  transition: 'all 0.2s',
+                  justifyContent: sidebarOpen ? 'flex-start' : 'center'
+                }}
                 title={!sidebarOpen ? item.label : undefined}
               >
-                <Icon className="w-5 h-5 flex-shrink-0" />
-                {sidebarOpen && <span className="font-medium">{item.label}</span>}
+                <Icon style={{ width: '20px', height: '20px', flexShrink: 0 }} />
+                {sidebarOpen && <span>{item.label}</span>}
               </Link>
             );
           })}
@@ -136,51 +227,172 @@ export function AdminLayout({ children }: AdminLayoutProps) {
         {/* Toggle button */}
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="absolute -right-3 top-20 w-6 h-6 bg-white rounded-full shadow-md flex items-center justify-center hover:bg-gray-100 transition-colors"
+          style={{
+            position: 'absolute',
+            right: '-14px',
+            top: '80px',
+            width: '28px',
+            height: '28px',
+            backgroundColor: 'white',
+            borderRadius: '50%',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: 'none',
+            cursor: 'pointer',
+            transition: 'all 0.2s'
+          }}
         >
-          <ChevronRight className={`w-4 h-4 text-conexion-profunda transition-transform ${sidebarOpen ? 'rotate-180' : ''}`} />
+          <ChevronLeft
+            style={{
+              width: '16px',
+              height: '16px',
+              color: '#36004E',
+              transition: 'transform 0.3s',
+              transform: sidebarOpen ? 'rotate(0deg)' : 'rotate(180deg)'
+            }}
+          />
         </button>
 
         {/* User section */}
-        <div className="p-4 border-t border-white/10">
-          <div className={`flex items-center gap-3 ${sidebarOpen ? '' : 'justify-center'}`}>
-            <div className="w-10 h-10 rounded-full gradient-brand flex items-center justify-center text-white font-bold">
+        <div
+          style={{
+            padding: '16px',
+            borderTop: '1px solid rgba(255,255,255,0.1)'
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              justifyContent: sidebarOpen ? 'flex-start' : 'center'
+            }}
+          >
+            <div
+              style={{
+                width: '40px',
+                height: '40px',
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #FF9601 0%, #AA1BF1 50%, #009AFF 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'white',
+                fontFamily: "'Isidora Alt Bold', sans-serif",
+                fontWeight: 'bold',
+                fontSize: '16px'
+              }}
+            >
               {profile?.first_name?.[0] || 'A'}
             </div>
             {sidebarOpen && (
-              <div className="flex-1 min-w-0">
-                <p className="text-white font-medium truncate">
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p
+                  style={{
+                    color: 'white',
+                    fontFamily: "'Centrale Sans Rounded', sans-serif",
+                    fontWeight: 500,
+                    fontSize: '14px',
+                    margin: 0,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
                   {profile?.first_name || 'Admin'}
                 </p>
-                <p className="text-white/60 text-sm">Administrador</p>
+                <p
+                  style={{
+                    color: 'rgba(255,255,255,0.6)',
+                    fontFamily: "'Centrale Sans Rounded', sans-serif",
+                    fontSize: '12px',
+                    margin: 0
+                  }}
+                >
+                  Administrador
+                </p>
               </div>
             )}
           </div>
           <button
             onClick={handleSignOut}
-            className={`mt-4 flex items-center gap-3 px-4 py-2 w-full rounded-xl text-white/80 hover:bg-white/10 hover:text-white transition-colors ${
-              sidebarOpen ? '' : 'justify-center'
-            }`}
+            style={{
+              marginTop: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              padding: '10px 16px',
+              width: '100%',
+              borderRadius: '12px',
+              border: 'none',
+              backgroundColor: 'transparent',
+              color: 'rgba(255,255,255,0.8)',
+              fontFamily: "'Centrale Sans Rounded', sans-serif",
+              fontSize: '14px',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              justifyContent: sidebarOpen ? 'flex-start' : 'center'
+            }}
             title={!sidebarOpen ? 'Cerrar sesion' : undefined}
           >
-            <LogOut className="w-5 h-5" />
+            <LogOut style={{ width: '20px', height: '20px' }} />
             {sidebarOpen && <span>Cerrar sesion</span>}
           </button>
         </div>
       </aside>
 
       {/* Main content */}
-      <main className={`transition-all duration-300 ${sidebarOpen ? 'lg:ml-64' : 'lg:ml-20'}`}>
+      <main
+        style={{
+          transition: 'margin-left 0.3s ease',
+          marginLeft: 0
+        }}
+        className={sidebarOpen ? 'lg:ml-64' : 'lg:ml-20'}
+      >
         {/* Desktop header */}
-        <header className="hidden lg:flex items-center justify-between bg-white border-b border-gray-200 px-8 py-4">
+        <header
+          className="hidden lg:flex"
+          style={{
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            backgroundColor: 'white',
+            borderBottom: '1px solid #E5E7EB',
+            padding: '20px 32px'
+          }}
+        >
           <div>
-            <h1 className="text-2xl font-bold text-conexion-profunda">
+            <h1
+              style={{
+                fontFamily: "'Isidora Alt Bold', sans-serif",
+                fontSize: '28px',
+                fontWeight: 'bold',
+                color: '#36004E',
+                margin: 0
+              }}
+            >
               {currentPage?.label || 'Admin'}
             </h1>
-            <p className="text-gray-500 text-sm">Panel de administracion de Enlazo</p>
+            <p
+              style={{
+                fontFamily: "'Centrale Sans Rounded', sans-serif",
+                fontSize: '14px',
+                color: '#6B7280',
+                margin: '4px 0 0 0'
+              }}
+            >
+              Panel de administracion de Enlazo
+            </p>
           </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-600">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <span
+              style={{
+                fontFamily: "'Centrale Sans Rounded', sans-serif",
+                fontSize: '14px',
+                color: '#6B7280'
+              }}
+            >
               {new Date().toLocaleDateString('es-MX', {
                 weekday: 'long',
                 year: 'numeric',
@@ -192,10 +404,26 @@ export function AdminLayout({ children }: AdminLayoutProps) {
         </header>
 
         {/* Page content */}
-        <div className="p-4 lg:p-8 pt-20 lg:pt-8">
+        <div
+          style={{ padding: '32px' }}
+          className="pt-20 lg:pt-8"
+        >
           {children}
         </div>
       </main>
+
+      <style>{`
+        @media (min-width: 1024px) {
+          .lg\\:hidden { display: none !important; }
+          .hidden.lg\\:flex { display: flex !important; }
+          .lg\\:ml-64 { margin-left: 256px !important; }
+          .lg\\:ml-20 { margin-left: 80px !important; }
+          .lg\\:pt-8 { padding-top: 32px !important; }
+        }
+        @media (max-width: 1023px) {
+          .pt-20 { padding-top: 80px !important; }
+        }
+      `}</style>
     </div>
   );
 }
