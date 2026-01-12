@@ -322,7 +322,11 @@ export function AdminLayout({ children }: AdminLayoutProps) {
             )}
           </div>
           <button
-            onClick={handleSignOut}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleSignOut();
+            }}
             style={{
               marginTop: '16px',
               display: 'flex',
@@ -332,15 +336,23 @@ export function AdminLayout({ children }: AdminLayoutProps) {
               width: '100%',
               borderRadius: '12px',
               border: 'none',
-              backgroundColor: 'transparent',
-              color: 'rgba(255,255,255,0.8)',
+              backgroundColor: 'rgba(255,255,255,0.1)',
+              color: 'rgba(255,255,255,0.9)',
               fontFamily: "'Centrale Sans Rounded', sans-serif",
               fontSize: '14px',
               cursor: 'pointer',
               transition: 'all 0.2s',
-              justifyContent: sidebarOpen ? 'flex-start' : 'center'
+              justifyContent: sidebarOpen ? 'flex-start' : 'center',
+              position: 'relative',
+              zIndex: 10
             }}
             title={!sidebarOpen ? 'Cerrar sesion' : undefined}
+            onMouseOver={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)';
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)';
+            }}
           >
             <LogOut style={{ width: '20px', height: '20px' }} />
             {sidebarOpen && <span>Cerrar sesion</span>}
