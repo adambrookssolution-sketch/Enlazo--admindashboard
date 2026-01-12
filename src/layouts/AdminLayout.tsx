@@ -111,7 +111,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                 borderBottom: '1px solid rgba(255,255,255,0.1)'
               }}
             >
-              <img src="/images/logo-white.png" alt="Enlazo" style={{ height: '28px' }} />
+              <img src="/images/logo.png" alt="Enlazo" style={{ height: '28px' }} />
               <button
                 onClick={() => setMobileMenuOpen(false)}
                 style={{
@@ -186,10 +186,10 @@ export function AdminLayout({ children }: AdminLayoutProps) {
           }}
         >
           <img
-            src="/images/logo-white.png"
+            src={sidebarOpen ? '/images/logo.png' : '/images/logo-icon.png'}
             alt="Enlazo"
             style={{
-              height: '28px'
+              height: sidebarOpen ? '28px' : '36px'
             }}
           />
         </div>
