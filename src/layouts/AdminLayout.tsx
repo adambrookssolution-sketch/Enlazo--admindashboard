@@ -31,8 +31,14 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   const { profile, signOut } = useAuth();
 
   const handleSignOut = async () => {
-    await signOut();
-    navigate('/login');
+    try {
+      await signOut();
+      navigate('/login');
+    } catch (error) {
+      console.error('Error signing out:', error);
+      // Force redirect to login even if signOut fails
+      navigate('/login');
+    }
   };
 
   const currentPage = navItems.find(item => item.path === location.pathname);
@@ -105,7 +111,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                 borderBottom: '1px solid rgba(255,255,255,0.1)'
               }}
             >
-              <img src="/images/logo.png" alt="Enlazo" style={{ height: '40px', filter: 'brightness(0) invert(1)' }} />
+              <img src="/images/logo-white.png" alt="Enlazo" style={{ height: '28px' }} />
               <button
                 onClick={() => setMobileMenuOpen(false)}
                 style={{
@@ -180,11 +186,10 @@ export function AdminLayout({ children }: AdminLayoutProps) {
           }}
         >
           <img
-            src="/images/logo.png"
+            src="/images/logo-white.png"
             alt="Enlazo"
             style={{
-              height: '40px',
-              filter: 'brightness(0) invert(1)'
+              height: '28px'
             }}
           />
         </div>

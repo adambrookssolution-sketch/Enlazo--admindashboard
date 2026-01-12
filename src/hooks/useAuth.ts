@@ -102,8 +102,32 @@ export function useAuth() {
   }
 
   async function signOut() {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('Supabase signOut error:', error);
+        throw error;
+      }
+      // Clear state immediately
+      setState({
+        user: null,
+        session: null,
+        profile: null,
+        isAdmin: false,
+        isLoading: false,
+      });
+    } catch (error) {
+      console.error('Error in signOut:', error);
+      // Clear state anyway to ensure logout
+      setState({
+        user: null,
+        session: null,
+        profile: null,
+        isAdmin: false,
+        isLoading: false,
+      });
+      throw error;
+    }
   }
 
   return {
