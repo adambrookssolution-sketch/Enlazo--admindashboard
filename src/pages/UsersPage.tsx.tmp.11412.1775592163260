@@ -54,22 +54,17 @@ export function UsersPage() {
   }, []);
 
   async function loadUsers() {
-    console.log('[UsersPage] loadUsers START');
     try {
-      console.log('[UsersPage] fetching profiles...');
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
         .select('id, first_name, last_name_paterno, last_name_materno, display_name, avatar_url, phone, created_at, is_blocked, blocked_reason, blocked_at')
         .order('created_at', { ascending: false });
-      console.log('[UsersPage] profiles result', { count: profiles?.length, error: profilesError });
 
       if (profilesError) throw profilesError;
 
-      console.log('[UsersPage] fetching user_roles...');
       const { data: allRoles, error: rolesError } = await supabase
         .from('user_roles')
         .select('user_id, role');
-      console.log('[UsersPage] roles result', { count: allRoles?.length, error: rolesError });
 
       if (rolesError) throw rolesError;
 

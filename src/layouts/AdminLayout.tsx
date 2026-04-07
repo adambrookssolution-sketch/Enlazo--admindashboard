@@ -8,7 +8,13 @@ import {
   LogOut,
   Menu,
   X,
-  ChevronLeft
+  ChevronLeft,
+  FileText,
+  MessageSquareQuote,
+  MessageCircle,
+  Star,
+  AlertTriangle,
+  BarChart3,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
@@ -20,7 +26,13 @@ const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/usuarios', label: 'Usuarios', icon: Users },
   { path: '/aprobaciones', label: 'Aprobaciones', icon: UserCheck },
+  { path: '/solicitudes', label: 'Solicitudes', icon: FileText },
+  { path: '/cotizaciones', label: 'Cotizaciones', icon: MessageSquareQuote },
+  { path: '/mensajes', label: 'Mensajes', icon: MessageCircle },
+  { path: '/resenas', label: 'Resenas', icon: Star },
+  { path: '/reportes', label: 'Reportes', icon: AlertTriangle },
   { path: '/categorias', label: 'Categorias', icon: FolderTree },
+  { path: '/analiticas', label: 'Analiticas', icon: BarChart3 },
 ];
 
 export function AdminLayout({ children }: AdminLayoutProps) {

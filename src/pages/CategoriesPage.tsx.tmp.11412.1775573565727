@@ -321,8 +321,8 @@ export function CategoriesPage() {
             borderRadius: '12px',
             border: 'none',
             cursor: 'pointer',
-            fontFamily: "'Centrale Sans Rounded', sans-serif",
-          }}
+            fontFamily: "'Centrale Sans Rounded', sans-serif',
+          } as any}
         >
           <Plus style={{ width: '20px', height: '20px' }} />
           Nueva Categoria

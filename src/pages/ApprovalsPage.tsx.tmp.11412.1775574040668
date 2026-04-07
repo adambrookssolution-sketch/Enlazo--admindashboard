@@ -729,44 +729,6 @@ export function ApprovalsPage() {
         </div>
       )}
 
-      {/* Suspend Modal */}
-      {showSuspendInput && selectedSpecialist && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ backgroundColor: 'white', borderRadius: '16px', maxWidth: '400px', width: '100%', padding: '24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-              <h3 style={{ fontFamily: "'Isidora Alt Bold', sans-serif", fontSize: '18px', fontWeight: 'bold', color: '#36004E', margin: 0 }}>
-                Suspender Especialista
-              </h3>
-              <button onClick={() => { setShowSuspendInput(false); setSuspendReason(''); }} style={{ padding: '8px', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
-                <X style={{ width: '20px', height: '20px' }} />
-              </button>
-            </div>
-            <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", color: '#4B5563', marginBottom: '16px' }}>
-              Indica la razon de la suspension de <strong>{getFullName(selectedSpecialist)}</strong>
-            </p>
-            <textarea
-              value={suspendReason}
-              onChange={(e) => setSuspendReason(e.target.value)}
-              style={{ width: '100%', padding: '12px 16px', border: '1px solid #E5E7EB', borderRadius: '12px', fontSize: '14px', fontFamily: "'Centrale Sans Rounded', sans-serif", resize: 'none', outline: 'none', boxSizing: 'border-box' }}
-              rows={4}
-              placeholder="Escribe la razon de la suspension..."
-            />
-            <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
-              <button onClick={() => { setShowSuspendInput(false); setSuspendReason(''); }} style={{ flex: 1, padding: '12px 16px', border: '1px solid #E5E7EB', backgroundColor: 'white', color: '#374151', fontWeight: 500, borderRadius: '12px', cursor: 'pointer', fontFamily: "'Centrale Sans Rounded', sans-serif" }}>
-                Cancelar
-              </button>
-              <button
-                onClick={() => handleSuspend(selectedSpecialist)}
-                disabled={!suspendReason.trim() || actionLoading}
-                style={{ flex: 1, padding: '12px 16px', border: 'none', backgroundColor: '#C2410C', color: 'white', fontWeight: 500, borderRadius: '12px', cursor: (!suspendReason.trim() || actionLoading) ? 'not-allowed' : 'pointer', opacity: (!suspendReason.trim() || actionLoading) ? 0.5 : 1, fontFamily: "'Centrale Sans Rounded', sans-serif" }}
-              >
-                {actionLoading ? 'Cargando...' : 'Suspender'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Revoke Confirmation Modal */}
       {showRevokeConfirm && selectedSpecialist && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', backgroundColor: 'rgba(0,0,0,0.5)' }}>

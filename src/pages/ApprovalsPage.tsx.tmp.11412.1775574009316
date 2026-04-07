@@ -420,7 +420,6 @@ export function ApprovalsPage() {
             <option value="pending">Pendientes</option>
             <option value="approved">Aprobados</option>
             <option value="rejected">Rechazados</option>
-            <option value="suspended">Suspendidos</option>
           </select>
         </div>
       </div>
@@ -526,30 +525,12 @@ export function ApprovalsPage() {
                   </>
                 )}
                 {specialist.status === 'approved' && (
-                  <>
-                    <button
-                      onClick={() => { setSelectedSpecialist(specialist); setShowSuspendInput(true); }}
-                      style={{ padding: '8px', color: '#C2410C', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
-                      title="Suspender"
-                    >
-                      <AlertCircle style={{ width: '20px', height: '20px' }} />
-                    </button>
-                    <button
-                      onClick={() => { setSelectedSpecialist(specialist); setShowRevokeConfirm(true); }}
-                      style={{ padding: '8px', color: '#DC2626', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
-                      title="Revocar"
-                    >
-                      <XCircle style={{ width: '20px', height: '20px' }} />
-                    </button>
-                  </>
-                )}
-                {specialist.status === 'suspended' && (
                   <button
-                    onClick={() => handleApprove(specialist)}
-                    style={{ padding: '8px', color: '#16A34A', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
-                    title="Reactivar"
+                    onClick={() => { setSelectedSpecialist(specialist); setShowRevokeConfirm(true); }}
+                    style={{ padding: '8px', color: '#DC2626', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
+                    title="Revocar"
                   >
-                    <CheckCircle style={{ width: '20px', height: '20px' }} />
+                    <XCircle style={{ width: '20px', height: '20px' }} />
                   </button>
                 )}
                 {specialist.status === 'rejected' && (
@@ -636,19 +617,6 @@ export function ApprovalsPage() {
                 </div>
               )}
 
-              {selectedSpecialist.rejection_reason && (
-                <div style={{ padding: '16px', backgroundColor: '#FEF2F2', borderRadius: '12px', marginBottom: '16px' }}>
-                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '13px', color: '#B91C1C', marginBottom: '8px' }}>Razon del Rechazo</p>
-                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", color: '#991B1B', margin: 0 }}>{selectedSpecialist.rejection_reason}</p>
-                </div>
-              )}
-              {selectedSpecialist.suspended_reason && (
-                <div style={{ padding: '16px', backgroundColor: '#FFF7ED', borderRadius: '12px', marginBottom: '16px' }}>
-                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '13px', color: '#C2410C', marginBottom: '8px' }}>Razon de la Suspension</p>
-                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", color: '#9A3412', margin: 0 }}>{selectedSpecialist.suspended_reason}</p>
-                </div>
-              )}
-
               {/* Document */}
               <div style={{ padding: '16px', backgroundColor: '#F9FAFB', borderRadius: '12px', marginBottom: '24px' }}>
                 <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '13px', color: '#6B7280', marginBottom: '8px' }}>Documento de Identidad</p>
@@ -723,44 +691,6 @@ export function ApprovalsPage() {
                 style={{ flex: 1, padding: '12px 16px', border: 'none', backgroundColor: '#DC2626', color: 'white', fontWeight: 500, borderRadius: '12px', cursor: (!rejectionReason.trim() || actionLoading) ? 'not-allowed' : 'pointer', opacity: (!rejectionReason.trim() || actionLoading) ? 0.5 : 1, fontFamily: "'Centrale Sans Rounded', sans-serif" }}
               >
                 {actionLoading ? 'Cargando...' : 'Rechazar'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Suspend Modal */}
-      {showSuspendInput && selectedSpecialist && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ backgroundColor: 'white', borderRadius: '16px', maxWidth: '400px', width: '100%', padding: '24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-              <h3 style={{ fontFamily: "'Isidora Alt Bold', sans-serif", fontSize: '18px', fontWeight: 'bold', color: '#36004E', margin: 0 }}>
-                Suspender Especialista
-              </h3>
-              <button onClick={() => { setShowSuspendInput(false); setSuspendReason(''); }} style={{ padding: '8px', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
-                <X style={{ width: '20px', height: '20px' }} />
-              </button>
-            </div>
-            <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", color: '#4B5563', marginBottom: '16px' }}>
-              Indica la razon de la suspension de <strong>{getFullName(selectedSpecialist)}</strong>
-            </p>
-            <textarea
-              value={suspendReason}
-              onChange={(e) => setSuspendReason(e.target.value)}
-              style={{ width: '100%', padding: '12px 16px', border: '1px solid #E5E7EB', borderRadius: '12px', fontSize: '14px', fontFamily: "'Centrale Sans Rounded', sans-serif", resize: 'none', outline: 'none', boxSizing: 'border-box' }}
-              rows={4}
-              placeholder="Escribe la razon de la suspension..."
-            />
-            <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
-              <button onClick={() => { setShowSuspendInput(false); setSuspendReason(''); }} style={{ flex: 1, padding: '12px 16px', border: '1px solid #E5E7EB', backgroundColor: 'white', color: '#374151', fontWeight: 500, borderRadius: '12px', cursor: 'pointer', fontFamily: "'Centrale Sans Rounded', sans-serif" }}>
-                Cancelar
-              </button>
-              <button
-                onClick={() => handleSuspend(selectedSpecialist)}
-                disabled={!suspendReason.trim() || actionLoading}
-                style={{ flex: 1, padding: '12px 16px', border: 'none', backgroundColor: '#C2410C', color: 'white', fontWeight: 500, borderRadius: '12px', cursor: (!suspendReason.trim() || actionLoading) ? 'not-allowed' : 'pointer', opacity: (!suspendReason.trim() || actionLoading) ? 0.5 : 1, fontFamily: "'Centrale Sans Rounded', sans-serif" }}
-              >
-                {actionLoading ? 'Cargando...' : 'Suspender'}
               </button>
             </div>
           </div>

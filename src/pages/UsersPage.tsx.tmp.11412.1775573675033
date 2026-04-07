@@ -45,77 +45,59 @@ export function UsersPage() {
   const [blockReason, setBlockReason] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
   const [showAdminModal, setShowAdminModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editForm, setEditForm] = useState({ first_name: '', last_name_paterno: '', last_name_materno: '', display_name: '', phone: '' });
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'blocked'>('all');
 
   useEffect(() => {
     loadUsers();
   }, []);
 
   async function loadUsers() {
-    console.log('[UsersPage] loadUsers START');
     try {
-      console.log('[UsersPage] fetching profiles...');
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, first_name, last_name_paterno, last_name_materno, display_name, avatar_url, phone, created_at, is_blocked, blocked_reason, blocked_at')
+        .select('id, first_name, last_name_paterno, last_name_materno, display_name, avatar_url, phone, created_at')
         .order('created_at', { ascending: false });
-      console.log('[UsersPage] profiles result', { count: profiles?.length, error: profilesError });
 
       if (profilesError) throw profilesError;
 
-      console.log('[UsersPage] fetching user_roles...');
       const { data: allRoles, error: rolesError } = await supabase
         .from('user_roles')
         .select('user_id, role');
-      console.log('[UsersPage] roles result', { count: allRoles?.length, error: rolesError });
 
       if (rolesError) throw rolesError;
 
       const rolesMap = new Map<string, string[]>();
-      allRoles?.forEach((r: any) => {
+      allRoles?.forEach(r => {
         const existing = rolesMap.get(r.user_id) || [];
         existing.push(r.role);
         rolesMap.set(r.user_id, existing);
       });
 
-      const usersWithRoles: UserProfile[] = (profiles || []).map((profile: any) => ({
+      const usersWithRoles: UserProfile[] = (profiles || []).map(profile => ({
         ...profile,
         roles: rolesMap.get(profile.id) || ['user'],
-        is_blocked: profile.is_blocked || false,
-        blocked_reason: profile.blocked_reason || null,
-        blocked_at: profile.blocked_at || null,
+        isBlocked: false,
       }));
 
       setUsers(usersWithRoles);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error loading users:', error);
-      alert('Error al cargar usuarios: ' + error.message);
     } finally {
       setLoading(false);
     }
   }
 
   const filteredUsers = users.filter(user => {
-    const q = searchQuery.toLowerCase();
     const matchesSearch =
-      (user.first_name?.toLowerCase().includes(q) || false) ||
-      (user.last_name_paterno?.toLowerCase().includes(q) || false) ||
-      (user.display_name?.toLowerCase().includes(q) || false) ||
-      (user.email?.toLowerCase().includes(q) || false) ||
+      user.first_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (user.last_name_paterno?.toLowerCase().includes(searchQuery.toLowerCase()) || false) ||
+      (user.display_name?.toLowerCase().includes(searchQuery.toLowerCase()) || false) ||
       (user.phone?.includes(searchQuery) || false);
 
     const matchesRole =
       filterRole === 'all' ||
       user.roles.includes(filterRole);
 
-    const matchesStatus =
-      statusFilter === 'all' ||
-      (statusFilter === 'active' && !user.is_blocked) ||
-      (statusFilter === 'blocked' && user.is_blocked);
-
-    return matchesSearch && matchesRole && matchesStatus;
+    return matchesSearch && matchesRole;
   });
 
   function getFullName(user: UserProfile): string {
@@ -158,69 +140,27 @@ export function UsersPage() {
 
   async function handleBlockUser() {
     if (!selectedUser) return;
-    if (!selectedUser.is_blocked && !blockReason.trim()) return;
+    if (!selectedUser.isBlocked && !blockReason.trim()) return;
 
     setActionLoading(true);
     try {
-      const newBlockedState = !selectedUser.is_blocked;
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          is_blocked: newBlockedState,
-          blocked_reason: newBlockedState ? blockReason.trim() : null,
-          blocked_at: newBlockedState ? new Date().toISOString() : null,
-          blocked_by: newBlockedState ? authUser?.id || null : null,
-        })
-        .eq('id', selectedUser.id);
-      if (error) throw error;
-      await loadUsers();
+      // TODO: Connect to actual banned_users table when created
+      // For now, we'll just update local state as is_blocked column doesn't exist in profiles table
+      console.log('Note: is_blocked functionality not yet implemented in database. Updating local state only.');
+
+      // Update local state
+      setUsers(users.map(u =>
+        u.id === selectedUser.id ? { ...u, isBlocked: !selectedUser.isBlocked } : u
+      ));
+
       setShowBlockModal(false);
       setBlockReason('');
       setSelectedUser(null);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error blocking user:', error);
-      alert('Error al bloquear usuario: ' + error.message);
     } finally {
       setActionLoading(false);
     }
-  }
-
-  async function handleEditUser() {
-    if (!selectedUser) return;
-    setActionLoading(true);
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          first_name: editForm.first_name.trim(),
-          last_name_paterno: editForm.last_name_paterno.trim() || null,
-          last_name_materno: editForm.last_name_materno.trim() || null,
-          display_name: editForm.display_name.trim() || null,
-          phone: editForm.phone.trim() || null,
-        })
-        .eq('id', selectedUser.id);
-      if (error) throw error;
-      await loadUsers();
-      setShowEditModal(false);
-      setSelectedUser(null);
-    } catch (error: any) {
-      alert('Error al editar usuario: ' + error.message);
-    } finally {
-      setActionLoading(false);
-    }
-  }
-
-  function openEditModal(user: UserProfile) {
-    setSelectedUser(user);
-    setEditForm({
-      first_name: user.first_name || '',
-      last_name_paterno: user.last_name_paterno || '',
-      last_name_materno: user.last_name_materno || '',
-      display_name: user.display_name || '',
-      phone: user.phone || '',
-    });
-    setShowEditModal(true);
   }
 
   async function handleToggleAdmin(user: UserProfile) {
@@ -339,24 +279,6 @@ export function UsersPage() {
             <option value="specialist">Especialistas</option>
             <option value="admin">Administradores</option>
           </select>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'blocked')}
-            style={{
-              padding: '12px 16px',
-              border: '1px solid #E5E7EB',
-              borderRadius: '12px',
-              fontSize: '14px',
-              fontFamily: "'Centrale Sans Rounded', sans-serif",
-              backgroundColor: 'white',
-              outline: 'none',
-              cursor: 'pointer'
-            }}
-          >
-            <option value="all">Todos los estados</option>
-            <option value="active">Activos</option>
-            <option value="blocked">Bloqueados</option>
-          </select>
         </div>
       </div>
 
@@ -416,7 +338,7 @@ export function UsersPage() {
                     </div>
                   </td>
                   <td style={{ padding: '16px 24px' }}>
-                    {user.is_blocked ? (
+                    {user.isBlocked ? (
                       <span style={{ padding: '4px 12px', fontSize: '12px', fontWeight: 500, backgroundColor: '#FEE2E2', color: '#B91C1C', borderRadius: '9999px', fontFamily: "'Centrale Sans Rounded', sans-serif" }}>
                         Bloqueado
                       </span>
@@ -429,13 +351,6 @@ export function UsersPage() {
                   <td style={{ padding: '16px 24px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px', position: 'relative' }}>
                       <button
-                        onClick={() => openEditModal(user)}
-                        style={{ padding: '8px', color: '#6B7280', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
-                        title="Editar"
-                      >
-                        <Edit2 style={{ width: '20px', height: '20px' }} />
-                      </button>
-                      <button
                         onClick={() => { setSelectedUser(user); setShowAdminModal(true); }}
                         style={{ padding: '8px', color: user.roles.includes('admin') ? '#DC2626' : '#9CA3AF', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
                         title={user.roles.includes('admin') ? 'Quitar Admin' : 'Hacer Admin'}
@@ -444,10 +359,10 @@ export function UsersPage() {
                       </button>
                       <button
                         onClick={() => { setSelectedUser(user); setShowBlockModal(true); }}
-                        style={{ padding: '8px', color: user.is_blocked ? '#16A34A' : '#9CA3AF', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
-                        title={user.is_blocked ? 'Desbloquear' : 'Bloquear'}
+                        style={{ padding: '8px', color: user.isBlocked ? '#16A34A' : '#9CA3AF', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
+                        title={user.isBlocked ? 'Desbloquear' : 'Bloquear'}
                       >
-                        {user.is_blocked ? <CheckCircle style={{ width: '20px', height: '20px' }} /> : <Ban style={{ width: '20px', height: '20px' }} />}
+                        {user.isBlocked ? <CheckCircle style={{ width: '20px', height: '20px' }} /> : <Ban style={{ width: '20px', height: '20px' }} />}
                       </button>
                     </div>
                   </td>
@@ -471,7 +386,7 @@ export function UsersPage() {
           <div style={{ backgroundColor: 'white', borderRadius: '16px', maxWidth: '400px', width: '100%', padding: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
               <h3 style={{ fontFamily: "'Isidora Alt Bold', sans-serif", fontSize: '18px', fontWeight: 'bold', color: '#36004E', margin: 0 }}>
-                {selectedUser.is_blocked ? 'Desbloquear Usuario' : 'Bloquear Usuario'}
+                {selectedUser.isBlocked ? 'Desbloquear Usuario' : 'Bloquear Usuario'}
               </h3>
               <button onClick={() => { setShowBlockModal(false); setBlockReason(''); setSelectedUser(null); }} style={{ padding: '8px', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
                 <X style={{ width: '20px', height: '20px' }} />
@@ -492,7 +407,7 @@ export function UsersPage() {
               </div>
             </div>
 
-            {!selectedUser.is_blocked && (
+            {!selectedUser.isBlocked && (
               <div style={{ marginBottom: '16px' }}>
                 <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#374151', marginBottom: '8px', fontFamily: "'Centrale Sans Rounded', sans-serif" }}>
                   Razon del bloqueo
@@ -513,21 +428,21 @@ export function UsersPage() {
               </button>
               <button
                 onClick={handleBlockUser}
-                disabled={!selectedUser.is_blocked && !blockReason.trim()}
+                disabled={!selectedUser.isBlocked && !blockReason.trim()}
                 style={{
                   flex: 1,
                   padding: '12px 16px',
                   border: 'none',
-                  backgroundColor: selectedUser.is_blocked ? '#16A34A' : '#DC2626',
+                  backgroundColor: selectedUser.isBlocked ? '#16A34A' : '#DC2626',
                   color: 'white',
                   fontWeight: 500,
                   borderRadius: '12px',
-                  cursor: (!selectedUser.is_blocked && !blockReason.trim()) ? 'not-allowed' : 'pointer',
-                  opacity: (!selectedUser.is_blocked && !blockReason.trim()) ? 0.5 : 1,
+                  cursor: (!selectedUser.isBlocked && !blockReason.trim()) ? 'not-allowed' : 'pointer',
+                  opacity: (!selectedUser.isBlocked && !blockReason.trim()) ? 0.5 : 1,
                   fontFamily: "'Centrale Sans Rounded', sans-serif"
                 }}
               >
-                {actionLoading ? 'Cargando...' : selectedUser.is_blocked ? 'Desbloquear' : 'Bloquear'}
+                {actionLoading ? 'Cargando...' : selectedUser.isBlocked ? 'Desbloquear' : 'Bloquear'}
               </button>
             </div>
           </div>
@@ -593,71 +508,6 @@ export function UsersPage() {
                 }}
               >
                 {actionLoading ? 'Cargando...' : selectedUser.roles.includes('admin') ? 'Quitar Admin' : 'Hacer Admin'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit User Modal */}
-      {showEditModal && selectedUser && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ backgroundColor: 'white', borderRadius: '16px', maxWidth: '480px', width: '100%', padding: '24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-              <h3 style={{ fontFamily: "'Isidora Alt Bold', sans-serif", fontSize: '18px', fontWeight: 'bold', color: '#36004E', margin: 0 }}>
-                Editar Usuario
-              </h3>
-              <button onClick={() => { setShowEditModal(false); setSelectedUser(null); }} style={{ padding: '8px', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
-                <X style={{ width: '20px', height: '20px' }} />
-              </button>
-            </div>
-
-            {[
-              { key: 'first_name', label: 'Nombre' },
-              { key: 'last_name_paterno', label: 'Apellido Paterno' },
-              { key: 'last_name_materno', label: 'Apellido Materno' },
-              { key: 'display_name', label: 'Nombre para mostrar' },
-              { key: 'phone', label: 'Telefono' },
-            ].map(f => (
-              <div key={f.key} style={{ marginBottom: '12px' }}>
-                <label style={{ display: 'block', fontSize: '14px', fontWeight: 500, color: '#374151', marginBottom: '6px', fontFamily: "'Centrale Sans Rounded', sans-serif" }}>
-                  {f.label}
-                </label>
-                <input
-                  type="text"
-                  value={(editForm as any)[f.key]}
-                  onChange={(e) => setEditForm({ ...editForm, [f.key]: e.target.value })}
-                  style={{ width: '100%', padding: '10px 14px', border: '1px solid #E5E7EB', borderRadius: '10px', fontSize: '14px', fontFamily: "'Centrale Sans Rounded', sans-serif", outline: 'none', boxSizing: 'border-box' }}
-                />
-              </div>
-            ))}
-
-            <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
-              <button onClick={() => { setShowEditModal(false); setSelectedUser(null); }} style={{ flex: 1, padding: '12px 16px', border: '1px solid #E5E7EB', backgroundColor: 'white', color: '#374151', fontWeight: 500, borderRadius: '12px', cursor: 'pointer', fontFamily: "'Centrale Sans Rounded', sans-serif" }}>
-                Cancelar
-              </button>
-              <button
-                onClick={handleEditUser}
-                disabled={actionLoading || !editForm.first_name.trim()}
-                style={{
-                  flex: 1,
-                  padding: '12px 16px',
-                  border: 'none',
-                  backgroundColor: '#36004E',
-                  color: 'white',
-                  fontWeight: 500,
-                  borderRadius: '12px',
-                  cursor: actionLoading ? 'not-allowed' : 'pointer',
-                  opacity: actionLoading ? 0.5 : 1,
-                  fontFamily: "'Centrale Sans Rounded', sans-serif",
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                }}
-              >
-                <Save style={{ width: '16px', height: '16px' }} />
-                {actionLoading ? 'Guardando...' : 'Guardar'}
               </button>
             </div>
           </div>

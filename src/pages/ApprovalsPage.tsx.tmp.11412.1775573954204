@@ -60,8 +60,6 @@ export function ApprovalsPage() {
   const [rejectionReason, setRejectionReason] = useState('');
   const [showRejectionInput, setShowRejectionInput] = useState(false);
   const [showRevokeConfirm, setShowRevokeConfirm] = useState(false);
-  const [showSuspendInput, setShowSuspendInput] = useState(false);
-  const [suspendReason, setSuspendReason] = useState('');
 
   useEffect(() => {
     loadSpecialists();
@@ -86,9 +84,7 @@ export function ApprovalsPage() {
           status,
           created_at,
           state,
-          city,
-          rejection_reason,
-          suspended_reason
+          city
         `)
         .order('created_at', { ascending: false });
 
@@ -103,7 +99,7 @@ export function ApprovalsPage() {
       const specialistIds = data?.map(s => s.id) || [];
       const { data: categories } = await supabase
         .from('specialist_categories')
-        .select('specialist_id, category:categories(name)')
+        .select('specialist_id, category:categories(category_name)')
         .in('specialist_id', specialistIds);
 
       const profilesMap = new Map(profiles?.map(p => [p.id, p]));
@@ -171,12 +167,6 @@ export function ApprovalsPage() {
             <XCircle style={{ width: '12px', height: '12px' }} /> Rechazado
           </span>
         );
-      case 'suspended':
-        return (
-          <span style={{ ...baseStyle, backgroundColor: '#FFEDD5', color: '#C2410C' }}>
-            <AlertCircle style={{ width: '12px', height: '12px' }} /> Suspendido
-          </span>
-        );
       default:
         return (
           <span style={{ ...baseStyle, backgroundColor: '#FEF3C7', color: '#A16207' }}>
@@ -189,18 +179,9 @@ export function ApprovalsPage() {
   async function handleApprove(specialist: SpecialistProfile) {
     setActionLoading(true);
     try {
-      const { data: { user: authUser } } = await supabase.auth.getUser();
       const { error: updateError } = await supabase
         .from('specialist_profiles')
-        .update({
-          status: 'approved',
-          approved_at: new Date().toISOString(),
-          approved_by: authUser?.id || null,
-          rejection_reason: null,
-          suspended_reason: null,
-          suspended_at: null,
-          suspended_by: null,
-        })
+        .update({ status: 'approved' })
         .eq('id', specialist.id);
 
       if (updateError) throw updateError;
@@ -234,15 +215,9 @@ export function ApprovalsPage() {
 
     setActionLoading(true);
     try {
-      const { data: { user: authUser } } = await supabase.auth.getUser();
       const { error: updateError } = await supabase
         .from('specialist_profiles')
-        .update({
-          status: 'rejected',
-          rejection_reason: rejectionReason.trim(),
-          rejected_at: new Date().toISOString(),
-          rejected_by: authUser?.id || null,
-        })
+        .update({ status: 'rejected' })
         .eq('id', specialist.id);
 
       if (updateError) throw updateError;
@@ -258,43 +233,8 @@ export function ApprovalsPage() {
       setSelectedSpecialist(null);
       setRejectionReason('');
       setShowRejectionInput(false);
-    } catch (error: any) {
-      alert('Error al rechazar: ' + error.message);
-    } finally {
-      setActionLoading(false);
-    }
-  }
-
-  async function handleSuspend(specialist: SpecialistProfile) {
-    if (!suspendReason.trim()) return;
-    setActionLoading(true);
-    try {
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      const { error: updateError } = await supabase
-        .from('specialist_profiles')
-        .update({
-          status: 'suspended',
-          suspended_reason: suspendReason.trim(),
-          suspended_at: new Date().toISOString(),
-          suspended_by: authUser?.id || null,
-        })
-        .eq('id', specialist.id);
-
-      if (updateError) throw updateError;
-
-      await supabase
-        .from('user_roles')
-        .delete()
-        .eq('user_id', specialist.user_id)
-        .eq('role', 'specialist');
-
-      await loadSpecialists();
-      setShowSuspendInput(false);
-      setSuspendReason('');
-      setShowDetailModal(false);
-      setSelectedSpecialist(null);
-    } catch (error: any) {
-      alert('Error al suspender: ' + error.message);
+    } catch (error) {
+      console.error('Error rejecting specialist:', error);
     } finally {
       setActionLoading(false);
     }
@@ -303,16 +243,10 @@ export function ApprovalsPage() {
   async function handleRevoke(specialist: SpecialistProfile) {
     setActionLoading(true);
     try {
-      const { data: { user: authUser } } = await supabase.auth.getUser();
       // Update specialist status to rejected
       const { error: updateError } = await supabase
         .from('specialist_profiles')
-        .update({
-          status: 'rejected',
-          rejection_reason: 'Revocado por administrador',
-          rejected_at: new Date().toISOString(),
-          rejected_by: authUser?.id || null,
-        })
+        .update({ status: 'rejected' })
         .eq('id', specialist.id);
 
       if (updateError) throw updateError;
@@ -420,7 +354,6 @@ export function ApprovalsPage() {
             <option value="pending">Pendientes</option>
             <option value="approved">Aprobados</option>
             <option value="rejected">Rechazados</option>
-            <option value="suspended">Suspendidos</option>
           </select>
         </div>
       </div>
@@ -491,7 +424,7 @@ export function ApprovalsPage() {
                   <div style={{ marginTop: '12px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                     {specialist.categories.map((cat, idx) => (
                       <span key={idx} style={{ padding: '4px 8px', fontSize: '12px', backgroundColor: 'rgba(170,27,241,0.1)', color: '#AA1BF1', borderRadius: '9999px', fontFamily: "'Centrale Sans Rounded', sans-serif" }}>
-                        {cat.category?.name}
+                        {cat.category?.category_name}
                       </span>
                     ))}
                   </div>
@@ -526,30 +459,12 @@ export function ApprovalsPage() {
                   </>
                 )}
                 {specialist.status === 'approved' && (
-                  <>
-                    <button
-                      onClick={() => { setSelectedSpecialist(specialist); setShowSuspendInput(true); }}
-                      style={{ padding: '8px', color: '#C2410C', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
-                      title="Suspender"
-                    >
-                      <AlertCircle style={{ width: '20px', height: '20px' }} />
-                    </button>
-                    <button
-                      onClick={() => { setSelectedSpecialist(specialist); setShowRevokeConfirm(true); }}
-                      style={{ padding: '8px', color: '#DC2626', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
-                      title="Revocar"
-                    >
-                      <XCircle style={{ width: '20px', height: '20px' }} />
-                    </button>
-                  </>
-                )}
-                {specialist.status === 'suspended' && (
                   <button
-                    onClick={() => handleApprove(specialist)}
-                    style={{ padding: '8px', color: '#16A34A', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
-                    title="Reactivar"
+                    onClick={() => { setSelectedSpecialist(specialist); setShowRevokeConfirm(true); }}
+                    style={{ padding: '8px', color: '#DC2626', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
+                    title="Revocar"
                   >
-                    <CheckCircle style={{ width: '20px', height: '20px' }} />
+                    <XCircle style={{ width: '20px', height: '20px' }} />
                   </button>
                 )}
                 {specialist.status === 'rejected' && (
@@ -636,19 +551,6 @@ export function ApprovalsPage() {
                 </div>
               )}
 
-              {selectedSpecialist.rejection_reason && (
-                <div style={{ padding: '16px', backgroundColor: '#FEF2F2', borderRadius: '12px', marginBottom: '16px' }}>
-                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '13px', color: '#B91C1C', marginBottom: '8px' }}>Razon del Rechazo</p>
-                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", color: '#991B1B', margin: 0 }}>{selectedSpecialist.rejection_reason}</p>
-                </div>
-              )}
-              {selectedSpecialist.suspended_reason && (
-                <div style={{ padding: '16px', backgroundColor: '#FFF7ED', borderRadius: '12px', marginBottom: '16px' }}>
-                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '13px', color: '#C2410C', marginBottom: '8px' }}>Razon de la Suspension</p>
-                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", color: '#9A3412', margin: 0 }}>{selectedSpecialist.suspended_reason}</p>
-                </div>
-              )}
-
               {/* Document */}
               <div style={{ padding: '16px', backgroundColor: '#F9FAFB', borderRadius: '12px', marginBottom: '24px' }}>
                 <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '13px', color: '#6B7280', marginBottom: '8px' }}>Documento de Identidad</p>
@@ -723,44 +625,6 @@ export function ApprovalsPage() {
                 style={{ flex: 1, padding: '12px 16px', border: 'none', backgroundColor: '#DC2626', color: 'white', fontWeight: 500, borderRadius: '12px', cursor: (!rejectionReason.trim() || actionLoading) ? 'not-allowed' : 'pointer', opacity: (!rejectionReason.trim() || actionLoading) ? 0.5 : 1, fontFamily: "'Centrale Sans Rounded', sans-serif" }}
               >
                 {actionLoading ? 'Cargando...' : 'Rechazar'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Suspend Modal */}
-      {showSuspendInput && selectedSpecialist && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ backgroundColor: 'white', borderRadius: '16px', maxWidth: '400px', width: '100%', padding: '24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-              <h3 style={{ fontFamily: "'Isidora Alt Bold', sans-serif", fontSize: '18px', fontWeight: 'bold', color: '#36004E', margin: 0 }}>
-                Suspender Especialista
-              </h3>
-              <button onClick={() => { setShowSuspendInput(false); setSuspendReason(''); }} style={{ padding: '8px', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
-                <X style={{ width: '20px', height: '20px' }} />
-              </button>
-            </div>
-            <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", color: '#4B5563', marginBottom: '16px' }}>
-              Indica la razon de la suspension de <strong>{getFullName(selectedSpecialist)}</strong>
-            </p>
-            <textarea
-              value={suspendReason}
-              onChange={(e) => setSuspendReason(e.target.value)}
-              style={{ width: '100%', padding: '12px 16px', border: '1px solid #E5E7EB', borderRadius: '12px', fontSize: '14px', fontFamily: "'Centrale Sans Rounded', sans-serif", resize: 'none', outline: 'none', boxSizing: 'border-box' }}
-              rows={4}
-              placeholder="Escribe la razon de la suspension..."
-            />
-            <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
-              <button onClick={() => { setShowSuspendInput(false); setSuspendReason(''); }} style={{ flex: 1, padding: '12px 16px', border: '1px solid #E5E7EB', backgroundColor: 'white', color: '#374151', fontWeight: 500, borderRadius: '12px', cursor: 'pointer', fontFamily: "'Centrale Sans Rounded', sans-serif" }}>
-                Cancelar
-              </button>
-              <button
-                onClick={() => handleSuspend(selectedSpecialist)}
-                disabled={!suspendReason.trim() || actionLoading}
-                style={{ flex: 1, padding: '12px 16px', border: 'none', backgroundColor: '#C2410C', color: 'white', fontWeight: 500, borderRadius: '12px', cursor: (!suspendReason.trim() || actionLoading) ? 'not-allowed' : 'pointer', opacity: (!suspendReason.trim() || actionLoading) ? 0.5 : 1, fontFamily: "'Centrale Sans Rounded', sans-serif" }}
-              >
-                {actionLoading ? 'Cargando...' : 'Suspender'}
               </button>
             </div>
           </div>

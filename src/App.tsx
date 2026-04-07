@@ -7,6 +7,12 @@ import { DashboardPage } from './pages/DashboardPage';
 import { UsersPage } from './pages/UsersPage';
 import { ApprovalsPage } from './pages/ApprovalsPage';
 import { CategoriesPage } from './pages/CategoriesPage';
+import { ServiceRequestsPage } from './pages/ServiceRequestsPage';
+import { QuotesPage } from './pages/QuotesPage';
+import { MessagesPage } from './pages/MessagesPage';
+import { ReviewsPage } from './pages/ReviewsPage';
+import { ReportsPage } from './pages/ReportsPage';
+import { AnalyticsPage } from './pages/AnalyticsPage';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -98,6 +104,54 @@ function App() {
             element={
               <ProtectedRoute>
                 <CategoriesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/solicitudes"
+            element={
+              <ProtectedRoute>
+                <ServiceRequestsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/cotizaciones"
+            element={
+              <ProtectedRoute>
+                <QuotesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/mensajes"
+            element={
+              <ProtectedRoute>
+                <MessagesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/resenas"
+            element={
+              <ProtectedRoute>
+                <ReviewsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/reportes"
+            element={
+              <ProtectedRoute>
+                <ReportsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/analiticas"
+            element={
+              <ProtectedRoute>
+                <AnalyticsPage />
               </ProtectedRoute>
             }
           />
