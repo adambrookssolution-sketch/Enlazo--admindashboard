@@ -163,17 +163,13 @@ export function UsersPage() {
     setActionLoading(true);
     try {
       const newBlockedState = !selectedUser.is_blocked;
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          is_blocked: newBlockedState,
-          blocked_reason: newBlockedState ? blockReason.trim() : null,
-          blocked_at: newBlockedState ? new Date().toISOString() : null,
-          blocked_by: newBlockedState ? authUser?.id || null : null,
-        })
-        .eq('id', selectedUser.id);
+      const { data, error } = await supabase.rpc('admin_ban_user', {
+        target_user_id: selectedUser.id,
+        should_ban: newBlockedState,
+        ban_reason: newBlockedState ? blockReason.trim() : null,
+      });
       if (error) throw error;
+      if (data && !(data as any).success) throw new Error((data as any).error || 'Error desconocido');
       await loadUsers();
       setShowBlockModal(false);
       setBlockReason('');

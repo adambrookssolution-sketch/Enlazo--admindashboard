@@ -12,6 +12,9 @@ import {
   Upload,
   Eye,
   EyeOff,
+  Table,
+  Columns,
+  GripVertical,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -27,6 +30,8 @@ interface Category {
   created_at: string | null;
   specialistCount?: number;
 }
+
+type ViewMode = 'table' | 'kanban';
 
 export function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -49,6 +54,7 @@ export function CategoriesPage() {
   const [saving, setSaving] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('table');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -278,6 +284,15 @@ export function CategoriesPage() {
     }
   }
 
+  // Kanban helpers
+  const kanbanActivos = filteredCategories.filter((c) => c.is_active);
+  const kanbanPorActivar = filteredCategories.filter(
+    (c) => !c.is_active && (c.description || c.icon_url)
+  );
+  const kanbanDesactivados = filteredCategories.filter(
+    (c) => !c.is_active && !c.description && !c.icon_url
+  );
+
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '256px' }}>
@@ -308,25 +323,73 @@ export function CategoriesPage() {
             {categories.length} categorias registradas ({categories.filter((c) => c.is_active).length} activas)
           </p>
         </div>
-        <button
-          onClick={openCreateModal}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '12px 16px',
-            backgroundColor: '#36004E',
-            color: 'white',
-            fontWeight: 500,
-            borderRadius: '12px',
-            border: 'none',
-            cursor: 'pointer',
-            fontFamily: "'Centrale Sans Rounded', sans-serif",
-          }}
-        >
-          <Plus style={{ width: '20px', height: '20px' }} />
-          Nueva Categoria
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {/* View Toggle */}
+          <div style={{ display: 'flex', borderRadius: '10px', border: '1px solid #E5E7EB', overflow: 'hidden' }}>
+            <button
+              onClick={() => setViewMode('table')}
+              title="Vista de tabla"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 14px',
+                fontSize: '13px',
+                fontWeight: 500,
+                border: 'none',
+                cursor: 'pointer',
+                fontFamily: "'Centrale Sans Rounded', sans-serif",
+                backgroundColor: viewMode === 'table' ? '#36004E' : 'white',
+                color: viewMode === 'table' ? 'white' : '#6B7280',
+                transition: 'all 0.2s',
+              }}
+            >
+              <Table style={{ width: '16px', height: '16px' }} />
+              Tabla
+            </button>
+            <button
+              onClick={() => setViewMode('kanban')}
+              title="Vista Kanban"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 14px',
+                fontSize: '13px',
+                fontWeight: 500,
+                border: 'none',
+                cursor: 'pointer',
+                fontFamily: "'Centrale Sans Rounded', sans-serif",
+                backgroundColor: viewMode === 'kanban' ? '#36004E' : 'white',
+                color: viewMode === 'kanban' ? 'white' : '#6B7280',
+                transition: 'all 0.2s',
+              }}
+            >
+              <Columns style={{ width: '16px', height: '16px' }} />
+              Kanban
+            </button>
+          </div>
+
+          <button
+            onClick={openCreateModal}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '12px 16px',
+              backgroundColor: '#36004E',
+              color: 'white',
+              fontWeight: 500,
+              borderRadius: '12px',
+              border: 'none',
+              cursor: 'pointer',
+              fontFamily: "'Centrale Sans Rounded', sans-serif",
+            }}
+          >
+            <Plus style={{ width: '20px', height: '20px' }} />
+            Nueva Categoria
+          </button>
+        </div>
       </div>
 
       {/* Search & Filter */}
@@ -370,95 +433,194 @@ export function CategoriesPage() {
         </select>
       </div>
 
-      {/* Categories Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '24px' }}>
-        {filteredCategories.map((category) => (
-          <div
-            key={category.id}
-            style={{
-              backgroundColor: 'white',
-              borderRadius: '16px',
-              padding: '24px',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-              border: '1px solid #F3F4F6',
-              opacity: category.is_active ? 1 : 0.6,
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '16px' }}>
-              <div style={{ padding: '12px', backgroundColor: 'rgba(170,27,241,0.1)', borderRadius: '12px', width: '48px', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {category.icon_url ? (
-                  <img src={category.icon_url} alt={category.name} style={{ width: '24px', height: '24px', objectFit: 'contain' }} />
-                ) : (
-                  <FolderTree style={{ width: '24px', height: '24px', color: '#AA1BF1' }} />
-                )}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <button
-                  onClick={() => handleToggleActive(category)}
-                  title={category.is_active ? 'Desactivar' : 'Activar'}
-                  style={{ padding: '8px', color: category.is_active ? '#10B981' : '#9CA3AF', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
-                >
-                  {category.is_active ? <Eye style={{ width: '16px', height: '16px' }} /> : <EyeOff style={{ width: '16px', height: '16px' }} />}
-                </button>
-                <button
-                  onClick={() => openEditModal(category)}
-                  title="Editar"
-                  style={{ padding: '8px', color: '#9CA3AF', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
-                >
-                  <Edit2 style={{ width: '16px', height: '16px' }} />
-                </button>
-                <button
-                  onClick={() => {
-                    setCategoryToDelete(category);
-                    setShowDeleteConfirm(true);
-                  }}
-                  title="Eliminar"
-                  style={{ padding: '8px', color: '#EF4444', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
-                >
-                  <Trash2 style={{ width: '16px', height: '16px' }} />
-                </button>
+      {/* TABLE VIEW */}
+      {viewMode === 'table' && (
+        <>
+          {filteredCategories.length > 0 ? (
+            <div style={{ backgroundColor: 'white', borderRadius: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', border: '1px solid #F3F4F6', overflow: 'hidden' }}>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: "'Centrale Sans Rounded', sans-serif" }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
+                      <th style={{ padding: '14px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 600, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Imagen
+                      </th>
+                      <th style={{ padding: '14px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 600, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Nombre
+                      </th>
+                      <th style={{ padding: '14px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 600, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Descripcion
+                      </th>
+                      <th style={{ padding: '14px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 600, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Especialistas
+                      </th>
+                      <th style={{ padding: '14px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 600, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Acciones
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredCategories.map((category, idx) => (
+                      <tr
+                        key={category.id}
+                        style={{
+                          borderBottom: idx < filteredCategories.length - 1 ? '1px solid #F3F4F6' : 'none',
+                          opacity: category.is_active ? 1 : 0.6,
+                          transition: 'background-color 0.15s',
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#FAFAFA')}
+                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                      >
+                        {/* Imagen */}
+                        <td style={{ padding: '12px 16px' }}>
+                          <div
+                            style={{
+                              width: '40px',
+                              height: '40px',
+                              borderRadius: '10px',
+                              backgroundColor: 'rgba(170,27,241,0.08)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              overflow: 'hidden',
+                            }}
+                          >
+                            {category.icon_url ? (
+                              <img
+                                src={category.icon_url}
+                                alt={category.name}
+                                style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '10px' }}
+                              />
+                            ) : (
+                              <FolderTree style={{ width: '20px', height: '20px', color: '#AA1BF1' }} />
+                            )}
+                          </div>
+                        </td>
+                        {/* Nombre */}
+                        <td style={{ padding: '12px 16px' }}>
+                          <div style={{ fontFamily: "'Isidora Alt Bold', sans-serif", fontWeight: 'bold', color: '#36004E', fontSize: '15px' }}>
+                            {category.name}
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#9CA3AF', marginTop: '2px' }}>{category.slug}</div>
+                        </td>
+                        {/* Descripcion */}
+                        <td style={{ padding: '12px 16px', maxWidth: '280px' }}>
+                          <span style={{ fontSize: '13px', color: '#6B7280', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                            {category.description || <span style={{ color: '#D1D5DB', fontStyle: 'italic' }}>Sin descripcion</span>}
+                          </span>
+                        </td>
+                        {/* Especialistas */}
+                        <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#4B5563', fontSize: '14px' }}>
+                            <Users style={{ width: '14px', height: '14px' }} />
+                            <span>{category.specialistCount}</span>
+                          </div>
+                        </td>
+                        {/* Acciones */}
+                        <td style={{ padding: '12px 16px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                            <button
+                              onClick={() => openEditModal(category)}
+                              title="Editar"
+                              style={{
+                                padding: '7px',
+                                color: '#6B7280',
+                                backgroundColor: 'transparent',
+                                border: 'none',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                transition: 'color 0.15s',
+                              }}
+                              onMouseEnter={(e) => (e.currentTarget.style.color = '#AA1BF1')}
+                              onMouseLeave={(e) => (e.currentTarget.style.color = '#6B7280')}
+                            >
+                              <Edit2 style={{ width: '16px', height: '16px' }} />
+                            </button>
+                            <button
+                              onClick={() => handleToggleActive(category)}
+                              title={category.is_active ? 'Desactivar' : 'Activar'}
+                              style={{
+                                padding: '7px',
+                                color: category.is_active ? '#10B981' : '#9CA3AF',
+                                backgroundColor: 'transparent',
+                                border: 'none',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              {category.is_active ? (
+                                <Eye style={{ width: '16px', height: '16px' }} />
+                              ) : (
+                                <EyeOff style={{ width: '16px', height: '16px' }} />
+                              )}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setCategoryToDelete(category);
+                                setShowDeleteConfirm(true);
+                              }}
+                              title="Eliminar"
+                              style={{
+                                padding: '7px',
+                                color: '#D1D5DB',
+                                backgroundColor: 'transparent',
+                                border: 'none',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                transition: 'color 0.15s',
+                              }}
+                              onMouseEnter={(e) => (e.currentTarget.style.color = '#EF4444')}
+                              onMouseLeave={(e) => (e.currentTarget.style.color = '#D1D5DB')}
+                            >
+                              <Trash2 style={{ width: '16px', height: '16px' }} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
-
-            <h3 style={{ fontFamily: "'Isidora Alt Bold', sans-serif", fontWeight: 'bold', color: '#36004E', fontSize: '18px', margin: '0 0 4px 0' }}>
-              {category.name}
-            </h3>
-            <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '14px', color: '#6B7280', margin: '0 0 8px 0' }}>
-              {category.slug}
-            </p>
-            {category.description && (
-              <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '13px', color: '#6B7280', margin: '0 0 16px 0', lineHeight: '1.4' }}>
-                {category.description}
-              </p>
-            )}
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '14px', marginTop: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#4B5563', fontFamily: "'Centrale Sans Rounded', sans-serif" }}>
-                <Users style={{ width: '16px', height: '16px' }} />
-                <span>{category.specialistCount} especialistas</span>
-              </div>
-              <span
-                style={{
-                  padding: '2px 8px',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  backgroundColor: category.is_active ? '#D1FAE5' : '#FEE2E2',
-                  color: category.is_active ? '#065F46' : '#991B1B',
-                  borderRadius: '9999px',
-                  fontFamily: "'Centrale Sans Rounded', sans-serif",
-                }}
-              >
-                {category.is_active ? 'Activa' : 'Inactiva'}
-              </span>
+          ) : (
+            <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '48px', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', border: '1px solid #F3F4F6' }}>
+              <FolderTree style={{ width: '48px', height: '48px', color: '#D1D5DB', margin: '0 auto 16px' }} />
+              <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", color: '#6B7280' }}>No se encontraron categorias</p>
             </div>
-          </div>
-        ))}
-      </div>
+          )}
+        </>
+      )}
 
-      {filteredCategories.length === 0 && (
-        <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '48px', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', border: '1px solid #F3F4F6' }}>
-          <FolderTree style={{ width: '48px', height: '48px', color: '#D1D5DB', margin: '0 auto 16px' }} />
-          <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", color: '#6B7280' }}>No se encontraron categorias</p>
+      {/* KANBAN VIEW */}
+      {viewMode === 'kanban' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px', alignItems: 'flex-start' }}>
+          {/* Activos Column */}
+          <KanbanColumn
+            title="Activos"
+            count={kanbanActivos.length}
+            headerColor="#DCFCE7"
+            headerTextColor="#166534"
+            items={kanbanActivos}
+            onCardClick={openEditModal}
+          />
+          {/* Por activar Column */}
+          <KanbanColumn
+            title="Por activar"
+            count={kanbanPorActivar.length}
+            headerColor="#FEF3C7"
+            headerTextColor="#92400E"
+            items={kanbanPorActivar}
+            onCardClick={openEditModal}
+          />
+          {/* Desactivados Column */}
+          <KanbanColumn
+            title="Desactivados"
+            count={kanbanDesactivados.length}
+            headerColor="#F3F4F6"
+            headerTextColor="#4B5563"
+            items={kanbanDesactivados}
+            onCardClick={openEditModal}
+          />
         </div>
       )}
 
@@ -669,6 +831,170 @@ export function CategoriesPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Kanban Column Component                                           */
+/* ------------------------------------------------------------------ */
+function KanbanColumn({
+  title,
+  count,
+  headerColor,
+  headerTextColor,
+  items,
+  onCardClick,
+}: {
+  title: string;
+  count: number;
+  headerColor: string;
+  headerTextColor: string;
+  items: Category[];
+  onCardClick: (cat: Category) => void;
+}) {
+  return (
+    <div
+      style={{
+        backgroundColor: 'white',
+        borderRadius: '14px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+        border: '1px solid #E5E7EB',
+        overflow: 'hidden',
+        minHeight: '200px',
+      }}
+    >
+      {/* Column header */}
+      <div
+        style={{
+          backgroundColor: headerColor,
+          padding: '14px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <span
+          style={{
+            fontFamily: "'Isidora Alt Bold', sans-serif",
+            fontWeight: 'bold',
+            fontSize: '15px',
+            color: headerTextColor,
+          }}
+        >
+          {title}
+        </span>
+        <span
+          style={{
+            backgroundColor: headerTextColor,
+            color: 'white',
+            fontSize: '12px',
+            fontWeight: 600,
+            padding: '2px 10px',
+            borderRadius: '9999px',
+            fontFamily: "'Centrale Sans Rounded', sans-serif",
+          }}
+        >
+          {count}
+        </span>
+      </div>
+
+      {/* Cards */}
+      <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {items.length === 0 && (
+          <div
+            style={{
+              padding: '24px 12px',
+              textAlign: 'center',
+              color: '#D1D5DB',
+              fontSize: '13px',
+              fontFamily: "'Centrale Sans Rounded', sans-serif",
+            }}
+          >
+            Sin categorias
+          </div>
+        )}
+        {items.map((cat) => (
+          <div
+            key={cat.id}
+            onClick={() => onCardClick(cat)}
+            style={{
+              padding: '12px',
+              borderRadius: '10px',
+              border: '1px solid #F3F4F6',
+              backgroundColor: '#FAFAFA',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              transition: 'box-shadow 0.15s, border-color 0.15s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.boxShadow = '0 2px 8px rgba(170,27,241,0.12)';
+              e.currentTarget.style.borderColor = '#E0C4F4';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.boxShadow = 'none';
+              e.currentTarget.style.borderColor = '#F3F4F6';
+            }}
+          >
+            {/* Drag handle (visual only) */}
+            <GripVertical style={{ width: '14px', height: '14px', color: '#D1D5DB', flexShrink: 0 }} />
+
+            {/* Icon thumbnail */}
+            <div
+              style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
+                backgroundColor: 'rgba(170,27,241,0.08)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                overflow: 'hidden',
+                flexShrink: 0,
+              }}
+            >
+              {cat.icon_url ? (
+                <img src={cat.icon_url} alt={cat.name} style={{ width: '36px', height: '36px', objectFit: 'cover', borderRadius: '8px' }} />
+              ) : (
+                <FolderTree style={{ width: '18px', height: '18px', color: '#AA1BF1' }} />
+              )}
+            </div>
+
+            {/* Name + specialist count */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div
+                style={{
+                  fontFamily: "'Isidora Alt Bold', sans-serif",
+                  fontWeight: 'bold',
+                  fontSize: '14px',
+                  color: '#36004E',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {cat.name}
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  fontSize: '12px',
+                  color: '#9CA3AF',
+                  marginTop: '2px',
+                  fontFamily: "'Centrale Sans Rounded', sans-serif",
+                }}
+              >
+                <Users style={{ width: '12px', height: '12px' }} />
+                <span>{cat.specialistCount} especialistas</span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

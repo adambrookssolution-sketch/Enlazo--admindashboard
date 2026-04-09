@@ -2,73 +2,88 @@ import { useEffect, useState } from 'react';
 import {
   MessageCircle,
   Trash2,
+  ChevronDown,
+  ChevronRight,
+  Search,
+  User,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { Card, Badge, SearchInput, Modal, Button, EmptyState, Avatar } from '../components/ui';
-import type { Tables } from '../types/database';
+import { Card, Badge, Modal, Button, EmptyState, Avatar } from '../components/ui';
 
-type Message = Tables<'messages'>;
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
 
 type Conversation = {
   quote_id: string;
-  messages: Message[];
-  client_profile?: Tables<'profiles'> | null;
-  specialist_profile?: Tables<'profiles'> | null;
-  specialist_data?: Tables<'specialist_profiles'> | null;
-  quote?: Tables<'quotes'> | null;
-  service_request?: Tables<'service_requests'> | null;
+  messages: any[];
+  client_profile: any;
+  specialist_profile: any;
+  specialist_data: any;
+  quote: any;
+  service_request: any;
   last_message_at: string;
   message_count: number;
 };
+
+type UserEntry = {
+  id: string;
+  name: string;
+  avatar_url: string | null;
+  role: 'client' | 'specialist';
+  conversations: Conversation[];
+};
+
+/* ------------------------------------------------------------------ */
+/*  Component                                                          */
+/* ------------------------------------------------------------------ */
 
 export function MessagesPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
 
   useEffect(() => {
     loadConversations();
   }, []);
 
+  /* ---------- data loading ---------- */
+
   async function loadConversations() {
     try {
       setLoading(true);
 
-      // Get all messages grouped by quote_id
-      const { data: messages, error } = await supabase
+      const { data: messages, error } = await (supabase as any)
         .from('messages')
         .select('*')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      // Group messages by quote_id
-      const groupedMessages = (messages || []).reduce((acc, message) => {
-        if (!acc[message.quote_id]) {
-          acc[message.quote_id] = [];
-        }
-        acc[message.quote_id].push(message);
-        return acc;
-      }, {} as Record<string, Message[]>);
+      // Group by quote_id
+      const grouped: Record<string, any[]> = {};
+      for (const msg of messages || []) {
+        if (!grouped[msg.quote_id]) grouped[msg.quote_id] = [];
+        grouped[msg.quote_id].push(msg);
+      }
 
-      // Enrich each conversation with related data
-      const enrichedConversations = await Promise.all(
-        Object.entries(groupedMessages).map(async ([quoteId, msgs]) => {
-          const { data: quote } = await supabase
+      const enriched: Conversation[] = await Promise.all(
+        Object.entries(grouped).map(async ([quoteId, msgs]) => {
+          const { data: quote } = await (supabase as any)
             .from('quotes')
             .select('*')
             .eq('id', quoteId)
             .single();
 
-          let clientProfile = null;
-          let specialistProfile = null;
-          let specialistData = null;
-          let serviceRequest = null;
+          let clientProfile: any = null;
+          let specialistProfile: any = null;
+          let specialistData: any = null;
+          let serviceRequest: any = null;
 
           if (quote) {
-            // Get service request and client
-            const { data: request } = await supabase
+            const { data: request } = await (supabase as any)
               .from('service_requests')
               .select('*')
               .eq('id', quote.request_id)
@@ -77,7 +92,7 @@ export function MessagesPage() {
             serviceRequest = request;
 
             if (request?.user_id) {
-              const { data: client } = await supabase
+              const { data: client } = await (supabase as any)
                 .from('profiles')
                 .select('*')
                 .eq('id', request.user_id)
@@ -85,8 +100,7 @@ export function MessagesPage() {
               clientProfile = client;
             }
 
-            // Get specialist
-            const { data: specialist } = await supabase
+            const { data: specialist } = await (supabase as any)
               .from('specialist_profiles')
               .select('*')
               .eq('id', quote.specialist_id)
@@ -95,7 +109,7 @@ export function MessagesPage() {
             specialistData = specialist;
 
             if (specialist?.user_id) {
-              const { data: specProfile } = await supabase
+              const { data: specProfile } = await (supabase as any)
                 .from('profiles')
                 .select('*')
                 .eq('id', specialist.user_id)
@@ -104,28 +118,31 @@ export function MessagesPage() {
             }
           }
 
+          const sorted = [...msgs].sort(
+            (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+          );
+
           return {
             quote_id: quoteId,
-            messages: (msgs as any[]).sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
+            messages: sorted,
             client_profile: clientProfile,
             specialist_profile: specialistProfile,
             specialist_data: specialistData,
             quote,
             service_request: serviceRequest,
-            last_message_at: (msgs as any[])[0].created_at,
-            message_count: (msgs as any[]).length,
+            last_message_at: msgs[0].created_at,
+            message_count: msgs.length,
           };
-        })
+        }),
       );
 
-      // Sort by last message
-      enrichedConversations.sort((a, b) =>
-        new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime()
+      enriched.sort(
+        (a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime(),
       );
 
-      setConversations(enrichedConversations);
-    } catch (error) {
-      console.error('Error loading conversations:', error);
+      setConversations(enriched);
+    } catch (err) {
+      console.error('Error loading conversations:', err);
     } finally {
       setLoading(false);
     }
@@ -133,38 +150,77 @@ export function MessagesPage() {
 
   async function deleteMessage(messageId: string) {
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('messages')
         .delete()
         .eq('id', messageId);
 
       if (error) throw error;
-
-      // Refresh conversations
       loadConversations();
 
-      // Update selected conversation if open
       if (selectedConversation) {
         setSelectedConversation({
           ...selectedConversation,
-          messages: selectedConversation.messages.filter(m => m.id !== messageId),
+          messages: selectedConversation.messages.filter((m: any) => m.id !== messageId),
         });
       }
-    } catch (error) {
-      console.error('Error deleting message:', error);
+    } catch (err) {
+      console.error('Error deleting message:', err);
     }
   }
 
-  const filteredConversations = conversations.filter((conv) => {
+  /* ---------- derived: build user list ---------- */
+
+  function buildUserList(): UserEntry[] {
+    const map: Record<string, UserEntry> = {};
+
+    for (const conv of conversations) {
+      // client
+      if (conv.client_profile?.id) {
+        const uid = conv.client_profile.id as string;
+        if (!map[uid]) {
+          const p = conv.client_profile;
+          map[uid] = {
+            id: uid,
+            name: [p.first_name, p.last_name_paterno, p.last_name_materno].filter(Boolean).join(' ') || p.display_name || 'Cliente',
+            avatar_url: p.avatar_url ?? null,
+            role: 'client',
+            conversations: [],
+          };
+        }
+        map[uid].conversations.push(conv);
+      }
+
+      // specialist
+      if (conv.specialist_profile?.id) {
+        const uid = conv.specialist_profile.id as string;
+        if (!map[uid]) {
+          const p = conv.specialist_profile;
+          map[uid] = {
+            id: uid,
+            name: [p.first_name, p.last_name_paterno, p.last_name_materno].filter(Boolean).join(' ') || p.display_name || 'Especialista',
+            avatar_url: p.avatar_url ?? conv.specialist_data?.profile_photo_url ?? null,
+            role: 'specialist',
+            conversations: [],
+          };
+        }
+        if (!map[uid].conversations.find((c) => c.quote_id === conv.quote_id)) {
+          map[uid].conversations.push(conv);
+        }
+      }
+    }
+
+    return Object.values(map).sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  const users = buildUserList();
+
+  const filteredUsers = users.filter((u) => {
     if (!search) return true;
-    const searchLower = search.toLowerCase();
-    return (
-      conv.client_profile?.first_name?.toLowerCase().includes(searchLower) ||
-      conv.specialist_profile?.first_name?.toLowerCase().includes(searchLower) ||
-      conv.service_request?.activity?.toLowerCase().includes(searchLower) ||
-      conv.messages.some(m => m.content.toLowerCase().includes(searchLower))
-    );
+    return u.name.toLowerCase().includes(search.toLowerCase());
   });
+
+  /* ---------- helpers ---------- */
 
   function formatDate(dateString: string) {
     const date = new Date(dateString);
@@ -191,6 +247,17 @@ export function MessagesPage() {
     });
   }
 
+  function otherPartyName(conv: Conversation, userId: string): string {
+    if (conv.client_profile?.id === userId) {
+      const p = conv.specialist_profile;
+      return p ? [p.first_name, p.last_name_paterno].filter(Boolean).join(' ') : 'Especialista';
+    }
+    const p = conv.client_profile;
+    return p ? [p.first_name, p.last_name_paterno].filter(Boolean).join(' ') : 'Cliente';
+  }
+
+  /* ---------- loading state ---------- */
+
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '256px' }}>
@@ -209,10 +276,21 @@ export function MessagesPage() {
     );
   }
 
+  /* ---------- render ---------- */
+
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '16px',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: '24px',
+        }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div
             style={{
@@ -224,103 +302,256 @@ export function MessagesPage() {
             <MessageCircle style={{ width: '24px', height: '24px', color: '#AA1BF1' }} />
           </div>
           <div>
-            <h2 style={{ fontFamily: "'Isidora Alt Bold', sans-serif", fontSize: '20px', color: '#36004E', margin: 0 }}>
+            <h2
+              style={{
+                fontFamily: "'Isidora Alt Bold', sans-serif",
+                fontSize: '20px',
+                color: '#36004E',
+                margin: 0,
+              }}
+            >
               Conversaciones
             </h2>
-            <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '14px', color: '#6B7280', margin: 0 }}>
-              {conversations.length} conversaciones activas
+            <p
+              style={{
+                fontFamily: "'Centrale Sans Rounded', sans-serif",
+                fontSize: '14px',
+                color: '#6B7280',
+                margin: 0,
+              }}
+            >
+              {conversations.length} conversaciones &middot; {users.length} usuarios
             </p>
           </div>
         </div>
-        <SearchInput value={search} onChange={setSearch} placeholder="Buscar conversaciones..." />
+
+        {/* Search bar */}
+        <div style={{ position: 'relative', minWidth: '260px', maxWidth: '380px', flex: 1 }}>
+          <Search
+            style={{
+              position: 'absolute',
+              left: '12px',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              width: '18px',
+              height: '18px',
+              color: '#9CA3AF',
+              pointerEvents: 'none',
+            }}
+          />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por nombre de usuario..."
+            style={{
+              width: '100%',
+              padding: '10px 14px 10px 40px',
+              border: '1px solid #E5E7EB',
+              borderRadius: '12px',
+              fontSize: '14px',
+              fontFamily: "'Centrale Sans Rounded', sans-serif",
+              outline: 'none',
+              color: '#36004E',
+              backgroundColor: '#fff',
+              boxSizing: 'border-box',
+            }}
+            onFocus={(e) => {
+              (e.target as HTMLInputElement).style.borderColor = '#AA1BF1';
+              (e.target as HTMLInputElement).style.boxShadow = '0 0 0 3px rgba(170,27,241,0.1)';
+            }}
+            onBlur={(e) => {
+              (e.target as HTMLInputElement).style.borderColor = '#E5E7EB';
+              (e.target as HTMLInputElement).style.boxShadow = 'none';
+            }}
+          />
+        </div>
       </div>
 
-      {/* Conversations List */}
-      {filteredConversations.length === 0 ? (
+      {/* User list */}
+      {filteredUsers.length === 0 ? (
         <Card>
           <EmptyState
-            icon={<MessageCircle style={{ width: '28px', height: '28px', color: '#9CA3AF' }} />}
-            title="No hay conversaciones"
-            description="No se encontraron conversaciones con los filtros actuales."
+            icon={<User style={{ width: '28px', height: '28px', color: '#9CA3AF' }} />}
+            title="No se encontraron usuarios"
+            description="Intenta con otro nombre de usuario."
           />
         </Card>
       ) : (
         <div style={{ display: 'grid', gap: '12px' }}>
-          {filteredConversations.map((conv) => {
-            const lastMessage = conv.messages[conv.messages.length - 1];
+          {filteredUsers.map((user) => {
+            const isExpanded = expandedUserId === user.id;
+
             return (
-              <Card key={conv.quote_id} hover onClick={() => setSelectedConversation(conv)}>
-                <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-                  {/* Avatars */}
-                  <div style={{ position: 'relative', width: '56px', height: '56px' }}>
-                    <Avatar
-                      src={conv.client_profile?.avatar_url}
-                      name={conv.client_profile?.first_name}
-                      size="lg"
-                    />
-                    <div
-                      style={{
-                        position: 'absolute',
-                        right: '-4px',
-                        bottom: '-4px',
-                        border: '2px solid white',
-                        borderRadius: '50%',
-                      }}
-                    >
-                      <Avatar
-                        src={conv.specialist_profile?.avatar_url}
-                        name={conv.specialist_profile?.first_name}
-                        size="sm"
-                      />
-                    </div>
-                  </div>
+              <div key={user.id}>
+                {/* User row */}
+                <Card
+                  hover
+                  onClick={() => setExpandedUserId(isExpanded ? null : user.id)}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    {/* Avatar */}
+                    <Avatar src={user.avatar_url} name={user.name} size="lg" />
 
-                  {/* Info */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                      <span style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '15px', fontWeight: 500, color: '#36004E' }}>
-                        {conv.client_profile?.first_name || 'Cliente'}
-                      </span>
-                      <span style={{ color: '#9CA3AF' }}>↔</span>
-                      <span style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '15px', fontWeight: 500, color: '#36004E' }}>
-                        {conv.specialist_profile?.first_name || 'Especialista'}
-                      </span>
+                    {/* Name + badge */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                        <span
+                          style={{
+                            fontFamily: "'Isidora Alt Bold', sans-serif",
+                            fontSize: '16px',
+                            color: '#36004E',
+                          }}
+                        >
+                          {user.name}
+                        </span>
+                        <Badge variant={user.role === 'client' ? 'info' : 'purple'} size="sm">
+                          {user.role === 'client' ? 'Cliente' : 'Especialista'}
+                        </Badge>
+                      </div>
+                      <p
+                        style={{
+                          fontFamily: "'Centrale Sans Rounded', sans-serif",
+                          fontSize: '13px',
+                          color: '#6B7280',
+                          margin: 0,
+                        }}
+                      >
+                        {user.conversations.length}{' '}
+                        {user.conversations.length === 1 ? 'conversacion' : 'conversaciones'}
+                      </p>
                     </div>
-                    <p
-                      style={{
-                        fontFamily: "'Centrale Sans Rounded', sans-serif",
-                        fontSize: '14px',
-                        color: '#6B7280',
-                        margin: '0 0 8px 0',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {lastMessage?.content}
-                    </p>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <Badge variant="info" size="sm">{conv.service_request?.category || 'Servicio'}</Badge>
-                      <span style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '12px', color: '#9CA3AF' }}>
-                        {conv.message_count} mensajes
-                      </span>
-                    </div>
-                  </div>
 
-                  {/* Time */}
-                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '13px', color: '#9CA3AF', margin: 0 }}>
-                      {formatDate(conv.last_message_at)}
-                    </p>
+                    {/* Expand icon */}
+                    <div style={{ flexShrink: 0, color: '#9CA3AF' }}>
+                      {isExpanded ? (
+                        <ChevronDown style={{ width: '20px', height: '20px' }} />
+                      ) : (
+                        <ChevronRight style={{ width: '20px', height: '20px' }} />
+                      )}
+                    </div>
                   </div>
-                </div>
-              </Card>
+                </Card>
+
+                {/* Expanded conversations */}
+                {isExpanded && (
+                  <div
+                    style={{
+                      marginLeft: '32px',
+                      marginTop: '4px',
+                      borderLeft: '3px solid rgba(170,27,241,0.2)',
+                      paddingLeft: '16px',
+                      display: 'grid',
+                      gap: '8px',
+                    }}
+                  >
+                    {user.conversations
+                      .slice()
+                      .sort(
+                        (a, b) =>
+                          new Date(b.last_message_at).getTime() -
+                          new Date(a.last_message_at).getTime(),
+                      )
+                      .map((conv) => {
+                        const lastMsg = conv.messages[conv.messages.length - 1];
+                        return (
+                          <div
+                            key={conv.quote_id}
+                            onClick={() => setSelectedConversation(conv)}
+                            style={{
+                              padding: '14px 16px',
+                              backgroundColor: '#fff',
+                              border: '1px solid #F3F4F6',
+                              borderRadius: '12px',
+                              cursor: 'pointer',
+                              transition: 'box-shadow 0.15s, border-color 0.15s',
+                            }}
+                            onMouseEnter={(e) => {
+                              (e.currentTarget as HTMLDivElement).style.borderColor = '#AA1BF1';
+                              (e.currentTarget as HTMLDivElement).style.boxShadow =
+                                '0 2px 8px rgba(170,27,241,0.1)';
+                            }}
+                            onMouseLeave={(e) => {
+                              (e.currentTarget as HTMLDivElement).style.borderColor = '#F3F4F6';
+                              (e.currentTarget as HTMLDivElement).style.boxShadow = 'none';
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                marginBottom: '6px',
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <MessageCircle
+                                  style={{ width: '14px', height: '14px', color: '#AA1BF1' }}
+                                />
+                                <span
+                                  style={{
+                                    fontFamily: "'Centrale Sans Rounded', sans-serif",
+                                    fontSize: '14px',
+                                    fontWeight: 600,
+                                    color: '#36004E',
+                                  }}
+                                >
+                                  {otherPartyName(conv, user.id)}
+                                </span>
+                                {conv.service_request?.category && (
+                                  <Badge variant="info" size="sm">
+                                    {conv.service_request.category}
+                                  </Badge>
+                                )}
+                              </div>
+                              <span
+                                style={{
+                                  fontFamily: "'Centrale Sans Rounded', sans-serif",
+                                  fontSize: '12px',
+                                  color: '#9CA3AF',
+                                  flexShrink: 0,
+                                }}
+                              >
+                                {formatDate(conv.last_message_at)}
+                              </span>
+                            </div>
+
+                            <p
+                              style={{
+                                fontFamily: "'Centrale Sans Rounded', sans-serif",
+                                fontSize: '13px',
+                                color: '#6B7280',
+                                margin: '0 0 4px 0',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {lastMsg?.content || '(sin mensajes)'}
+                            </p>
+
+                            <span
+                              style={{
+                                fontFamily: "'Centrale Sans Rounded', sans-serif",
+                                fontSize: '12px',
+                                color: '#9CA3AF',
+                              }}
+                            >
+                              {conv.message_count}{' '}
+                              {conv.message_count === 1 ? 'mensaje' : 'mensajes'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
       )}
 
-      {/* Conversation Detail Modal */}
+      {/* ---- Conversation Detail Modal ---- */}
       <Modal
         isOpen={!!selectedConversation}
         onClose={() => setSelectedConversation(null)}
@@ -330,7 +561,15 @@ export function MessagesPage() {
         {selectedConversation && (
           <div>
             {/* Participants */}
-            <div style={{ display: 'flex', gap: '24px', marginBottom: '24px', paddingBottom: '24px', borderBottom: '1px solid #F3F4F6' }}>
+            <div
+              style={{
+                display: 'flex',
+                gap: '24px',
+                marginBottom: '24px',
+                paddingBottom: '24px',
+                borderBottom: '1px solid #F3F4F6',
+              }}
+            >
               <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <Avatar
                   src={selectedConversation.client_profile?.avatar_url}
@@ -338,11 +577,27 @@ export function MessagesPage() {
                   size="lg"
                 />
                 <div>
-                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '12px', color: '#9CA3AF', margin: '0 0 2px 0' }}>
+                  <p
+                    style={{
+                      fontFamily: "'Centrale Sans Rounded', sans-serif",
+                      fontSize: '12px',
+                      color: '#9CA3AF',
+                      margin: '0 0 2px 0',
+                    }}
+                  >
                     Cliente
                   </p>
-                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '15px', fontWeight: 500, color: '#36004E', margin: 0 }}>
-                    {selectedConversation.client_profile?.first_name} {selectedConversation.client_profile?.last_name_paterno}
+                  <p
+                    style={{
+                      fontFamily: "'Centrale Sans Rounded', sans-serif",
+                      fontSize: '15px',
+                      fontWeight: 500,
+                      color: '#36004E',
+                      margin: 0,
+                    }}
+                  >
+                    {selectedConversation.client_profile?.first_name}{' '}
+                    {selectedConversation.client_profile?.last_name_paterno}
                   </p>
                 </div>
               </div>
@@ -353,27 +608,67 @@ export function MessagesPage() {
                   size="lg"
                 />
                 <div>
-                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '12px', color: '#9CA3AF', margin: '0 0 2px 0' }}>
+                  <p
+                    style={{
+                      fontFamily: "'Centrale Sans Rounded', sans-serif",
+                      fontSize: '12px',
+                      color: '#9CA3AF',
+                      margin: '0 0 2px 0',
+                    }}
+                  >
                     Especialista
                   </p>
-                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '15px', fontWeight: 500, color: '#36004E', margin: 0 }}>
-                    {selectedConversation.specialist_profile?.first_name} {selectedConversation.specialist_profile?.last_name_paterno}
+                  <p
+                    style={{
+                      fontFamily: "'Centrale Sans Rounded', sans-serif",
+                      fontSize: '15px',
+                      fontWeight: 500,
+                      color: '#36004E',
+                      margin: 0,
+                    }}
+                  >
+                    {selectedConversation.specialist_profile?.first_name}{' '}
+                    {selectedConversation.specialist_profile?.last_name_paterno}
                   </p>
                 </div>
               </div>
             </div>
 
-            {/* Service Context */}
-            <div style={{ padding: '16px', backgroundColor: '#F9FAFB', borderRadius: '12px', marginBottom: '24px' }}>
-              <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '12px', color: '#9CA3AF', margin: '0 0 4px 0' }}>
+            {/* Service context */}
+            <div
+              style={{
+                padding: '16px',
+                backgroundColor: '#F9FAFB',
+                borderRadius: '12px',
+                marginBottom: '24px',
+              }}
+            >
+              <p
+                style={{
+                  fontFamily: "'Centrale Sans Rounded', sans-serif",
+                  fontSize: '12px',
+                  color: '#9CA3AF',
+                  margin: '0 0 4px 0',
+                }}
+              >
                 Servicio
               </p>
-              <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '15px', fontWeight: 500, color: '#36004E', margin: 0 }}>
-                {selectedConversation.service_request?.service_title || selectedConversation.service_request?.activity}
+              <p
+                style={{
+                  fontFamily: "'Centrale Sans Rounded', sans-serif",
+                  fontSize: '15px',
+                  fontWeight: 500,
+                  color: '#36004E',
+                  margin: 0,
+                }}
+              >
+                {selectedConversation.service_request?.category ||
+                  selectedConversation.service_request?.activity ||
+                  'Sin especificar'}
               </p>
             </div>
 
-            {/* Messages */}
+            {/* Messages thread */}
             <div
               style={{
                 maxHeight: '400px',
@@ -384,9 +679,12 @@ export function MessagesPage() {
                 marginBottom: '24px',
               }}
             >
-              {selectedConversation.messages.map((message, index) => {
-                const isClient = message.sender_id === selectedConversation.client_profile?.id;
-                const senderProfile = isClient ? selectedConversation.client_profile : selectedConversation.specialist_profile;
+              {selectedConversation.messages.map((message: any, index: number) => {
+                const isClient =
+                  message.sender_id === selectedConversation.client_profile?.id;
+                const senderProfile = isClient
+                  ? selectedConversation.client_profile
+                  : selectedConversation.specialist_profile;
 
                 return (
                   <div
@@ -394,19 +692,44 @@ export function MessagesPage() {
                     style={{
                       display: 'flex',
                       gap: '12px',
-                      marginBottom: index < selectedConversation.messages.length - 1 ? '16px' : 0,
+                      marginBottom:
+                        index < selectedConversation.messages.length - 1 ? '16px' : 0,
                     }}
                   >
-                    <Avatar src={senderProfile?.avatar_url} name={senderProfile?.first_name} size="sm" />
+                    <Avatar
+                      src={senderProfile?.avatar_url}
+                      name={senderProfile?.first_name}
+                      size="sm"
+                    />
                     <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                        <span style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '13px', fontWeight: 500, color: '#36004E' }}>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          marginBottom: '4px',
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontFamily: "'Centrale Sans Rounded', sans-serif",
+                            fontSize: '13px',
+                            fontWeight: 500,
+                            color: '#36004E',
+                          }}
+                        >
                           {senderProfile?.first_name || 'Usuario'}
                         </span>
                         <Badge variant={isClient ? 'info' : 'purple'} size="sm">
                           {isClient ? 'Cliente' : 'Especialista'}
                         </Badge>
-                        <span style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '12px', color: '#9CA3AF' }}>
+                        <span
+                          style={{
+                            fontFamily: "'Centrale Sans Rounded', sans-serif",
+                            fontSize: '12px',
+                            color: '#9CA3AF',
+                          }}
+                        >
                           {formatFullDate(message.created_at)}
                         </span>
                       </div>
@@ -418,7 +741,15 @@ export function MessagesPage() {
                           borderTopLeftRadius: '4px',
                         }}
                       >
-                        <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '14px', color: '#36004E', margin: 0, lineHeight: 1.5 }}>
+                        <p
+                          style={{
+                            fontFamily: "'Centrale Sans Rounded', sans-serif",
+                            fontSize: '14px',
+                            color: '#36004E',
+                            margin: 0,
+                            lineHeight: 1.5,
+                          }}
+                        >
                           {message.content}
                         </p>
                       </div>
@@ -454,7 +785,14 @@ export function MessagesPage() {
             </div>
 
             {/* Actions */}
-            <div style={{ display: 'flex', gap: '12px', paddingTop: '16px', borderTop: '1px solid #F3F4F6' }}>
+            <div
+              style={{
+                display: 'flex',
+                gap: '12px',
+                paddingTop: '16px',
+                borderTop: '1px solid #F3F4F6',
+              }}
+            >
               <Button variant="ghost" onClick={() => setSelectedConversation(null)}>
                 Cerrar
               </Button>

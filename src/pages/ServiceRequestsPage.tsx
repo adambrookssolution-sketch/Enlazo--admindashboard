@@ -1,32 +1,134 @@
 import { useEffect, useState } from 'react';
 import {
   FileText,
-  MapPin,
   Calendar,
   Clock,
   DollarSign,
-  MessageSquare,
+  Search,
   CheckCircle,
   XCircle,
   Play,
+  ChevronDown,
+  ChevronRight,
+  Users,
+  Phone,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { Card, Badge, SearchInput, Tabs, Modal, Button, EmptyState, Avatar } from '../components/ui';
-import type { Tables } from '../types/database';
+import { Card, Badge, Tabs, Modal, Button, EmptyState, Avatar } from '../components/ui';
 
-type ServiceRequest = Tables<'service_requests'> & {
-  profile?: Tables<'profiles'> | null;
-  location?: Tables<'locations'> | null;
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
+
+interface Profile {
+  id: string;
+  first_name: string | null;
+  last_name_paterno: string | null;
+  last_name_materno: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  phone: string | null;
+}
+
+interface ServiceRequest {
+  id: string;
+  activity: string | null;
+  category: string | null;
+  status: string;
+  created_at: string;
+  description: string | null;
+  service_description: string | null;
+  service_title: string | null;
+  evidence_urls: string[] | null;
+  is_urgent: boolean | null;
+  price_min: number | null;
+  price_max: number | null;
+  user_id: string;
+  location_id: string | null;
+  scheduled_date: string | null;
+  time_preference: string | null;
+  time_start: string | null;
+  time_end: string | null;
+  updated_at: string | null;
+  profile?: Profile | null;
+  location?: any;
   quotes_count?: number;
+}
+
+interface ClientGroup {
+  profile: Profile;
+  requests: ServiceRequest[];
+}
+
+/* ------------------------------------------------------------------ */
+/*  Status helpers                                                     */
+/* ------------------------------------------------------------------ */
+
+const statusConfig: Record<string, { label: string; bg: string; color: string }> = {
+  draft:       { label: 'Borrador',     bg: '#F3F4F6', color: '#6B7280' },
+  active:      { label: 'Activa',       bg: '#DCFCE7', color: '#15803D' },
+  open:        { label: 'Abierta',      bg: '#DCFCE7', color: '#15803D' },
+  in_progress: { label: 'En Progreso',  bg: '#DBEAFE', color: '#1D4ED8' },
+  completed:   { label: 'Completada',   bg: '#F3E8FF', color: '#7C3AED' },
+  cancelled:   { label: 'Cancelada',    bg: '#FEE2E2', color: '#B91C1C' },
 };
 
-const statusConfig: Record<string, { label: string; variant: 'success' | 'warning' | 'error' | 'info' | 'default' | 'purple' }> = {
-  draft: { label: 'Borrador', variant: 'default' },
-  active: { label: 'Activa', variant: 'info' },
-  in_progress: { label: 'En Progreso', variant: 'purple' },
-  completed: { label: 'Completada', variant: 'success' },
-  cancelled: { label: 'Cancelada', variant: 'error' },
+const statusBadgeVariant: Record<string, 'success' | 'warning' | 'error' | 'info' | 'default' | 'purple'> = {
+  draft: 'default',
+  active: 'success',
+  open: 'success',
+  in_progress: 'info',
+  completed: 'purple',
+  cancelled: 'error',
 };
+
+function getStatusBadge(status: string) {
+  const cfg = statusConfig[status] || statusConfig.draft;
+  return (
+    <span
+      style={{
+        display: 'inline-block',
+        padding: '2px 10px',
+        borderRadius: '9999px',
+        fontSize: '12px',
+        fontWeight: 600,
+        fontFamily: "'Centrale Sans Rounded', sans-serif",
+        backgroundColor: cfg.bg,
+        color: cfg.color,
+      }}
+    >
+      {cfg.label}
+    </span>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Utility                                                            */
+/* ------------------------------------------------------------------ */
+
+function formatDate(dateString: string | null) {
+  if (!dateString) return '-';
+  return new Date(dateString).toLocaleDateString('es-MX', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function formatPrice(min: number | null, max: number | null) {
+  if (!min && !max) return 'Sin presupuesto';
+  if (min && max) return `$${min.toLocaleString()} - $${max.toLocaleString()}`;
+  if (min) return `Desde $${min.toLocaleString()}`;
+  return `Hasta $${max?.toLocaleString()}`;
+}
+
+function clientFullName(p: Profile): string {
+  return [p.first_name, p.last_name_paterno, p.last_name_materno].filter(Boolean).join(' ') || p.display_name || 'Sin nombre';
+}
+
+/* ------------------------------------------------------------------ */
+/*  Component                                                          */
+/* ------------------------------------------------------------------ */
 
 export function ServiceRequestsPage() {
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
@@ -34,6 +136,7 @@ export function ServiceRequestsPage() {
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState('all');
   const [selectedRequest, setSelectedRequest] = useState<ServiceRequest | null>(null);
+  const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set());
   const [counts, setCounts] = useState({
     all: 0,
     active: 0,
@@ -47,6 +150,8 @@ export function ServiceRequestsPage() {
     loadCounts();
   }, [activeTab]);
 
+  /* ---- Data loading ---- */
+
   async function loadCounts() {
     const [all, active, inProgress, completed, cancelled] = await Promise.all([
       supabase.from('service_requests').select('*', { count: 'exact', head: true }),
@@ -57,51 +162,53 @@ export function ServiceRequestsPage() {
     ]);
 
     setCounts({
-      all: all.count || 0,
-      active: active.count || 0,
-      in_progress: inProgress.count || 0,
-      completed: completed.count || 0,
-      cancelled: cancelled.count || 0,
+      all: (all as any).count || 0,
+      active: (active as any).count || 0,
+      in_progress: (inProgress as any).count || 0,
+      completed: (completed as any).count || 0,
+      cancelled: (cancelled as any).count || 0,
     });
   }
 
   async function loadRequests() {
     try {
       setLoading(true);
-      let query = supabase
+      let query = (supabase as any)
         .from('service_requests')
         .select('*')
         .order('created_at', { ascending: false });
 
       if (activeTab !== 'all') {
-        query = query.eq('status', activeTab as 'draft' | 'active' | 'in_progress' | 'completed' | 'cancelled');
+        query = query.eq('status', activeTab);
       }
 
       const { data, error } = await query;
-
       if (error) throw error;
 
-      // Load profiles and locations for each request
-      const enrichedRequests = await Promise.all(
-        (data || []).map(async (request) => {
-          const [profileResult, locationResult, quotesResult] = await Promise.all([
-            supabase.from('profiles').select('*').eq('id', request.user_id).single(),
-            request.location_id
-              ? supabase.from('locations').select('*').eq('id', request.location_id).single()
-              : Promise.resolve({ data: null }),
-            supabase.from('quotes').select('*', { count: 'exact', head: true }).eq('request_id', request.id),
-          ]);
+      // Collect unique user_ids
+      const userIds = [...new Set((data || []).map((r: any) => r.user_id))] as string[];
 
-          return {
-            ...request,
-            profile: profileResult.data,
-            location: locationResult.data,
-            quotes_count: quotesResult.count || 0,
-          };
-        })
-      );
+      // Batch-load all profiles at once
+      let profilesMap: Record<string, Profile> = {};
+      if (userIds.length > 0) {
+        const { data: profiles } = await (supabase as any)
+          .from('profiles')
+          .select('id, first_name, last_name_paterno, last_name_materno, display_name, avatar_url, phone')
+          .in('id', userIds);
 
-      setRequests(enrichedRequests);
+        if (profiles) {
+          for (const p of profiles as Profile[]) {
+            profilesMap[p.id] = p;
+          }
+        }
+      }
+
+      const enriched: ServiceRequest[] = (data || []).map((r: any) => ({
+        ...r,
+        profile: profilesMap[r.user_id] || null,
+      }));
+
+      setRequests(enriched);
     } catch (error) {
       console.error('Error loading requests:', error);
     } finally {
@@ -109,9 +216,9 @@ export function ServiceRequestsPage() {
     }
   }
 
-  async function updateRequestStatus(requestId: string, newStatus: 'draft' | 'active' | 'in_progress' | 'completed' | 'cancelled') {
+  async function updateRequestStatus(requestId: string, newStatus: string) {
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('service_requests')
         .update({ status: newStatus, updated_at: new Date().toISOString() })
         .eq('id', requestId);
@@ -126,16 +233,57 @@ export function ServiceRequestsPage() {
     }
   }
 
-  const filteredRequests = requests.filter((request) => {
-    if (!search) return true;
-    const searchLower = search.toLowerCase();
-    return (
-      request.activity?.toLowerCase().includes(searchLower) ||
-      request.category?.toLowerCase().includes(searchLower) ||
-      request.service_title?.toLowerCase().includes(searchLower) ||
-      request.profile?.first_name?.toLowerCase().includes(searchLower)
-    );
+  /* ---- Filtering & grouping ---- */
+
+  // Group requests by client (user_id)
+  function groupByClient(reqs: ServiceRequest[]): ClientGroup[] {
+    const map: Record<string, ClientGroup> = {};
+    for (const r of reqs) {
+      const uid = r.user_id;
+      if (!map[uid]) {
+        map[uid] = {
+          profile: r.profile || {
+            id: uid,
+            first_name: null,
+            last_name_paterno: null,
+            last_name_materno: null,
+            display_name: null,
+            avatar_url: null,
+            phone: null,
+          },
+          requests: [],
+        };
+      }
+      map[uid].requests.push(r);
+    }
+    // Sort clients by total requests desc
+    return Object.values(map).sort((a, b) => b.requests.length - a.requests.length);
+  }
+
+  // Filter by search (client name or phone)
+  const searchLower = search.toLowerCase().trim();
+  const filteredRequests = requests.filter((r) => {
+    if (!searchLower) return true;
+    const name = clientFullName(r.profile || ({} as Profile)).toLowerCase();
+    const phone = (r.profile?.phone || '').toLowerCase();
+    return name.includes(searchLower) || phone.includes(searchLower);
   });
+
+  const clientGroups = groupByClient(filteredRequests);
+
+  function toggleClient(clientId: string) {
+    setExpandedClients((prev) => {
+      const next = new Set(prev);
+      if (next.has(clientId)) {
+        next.delete(clientId);
+      } else {
+        next.add(clientId);
+      }
+      return next;
+    });
+  }
+
+  /* ---- Tabs ---- */
 
   const tabs = [
     { id: 'all', label: 'Todas', count: counts.all },
@@ -145,21 +293,7 @@ export function ServiceRequestsPage() {
     { id: 'cancelled', label: 'Canceladas', count: counts.cancelled },
   ];
 
-  function formatDate(dateString: string | null) {
-    if (!dateString) return '-';
-    return new Date(dateString).toLocaleDateString('es-MX', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    });
-  }
-
-  function formatPrice(min: number | null, max: number | null) {
-    if (!min && !max) return 'Sin presupuesto';
-    if (min && max) return `$${min.toLocaleString()} - $${max.toLocaleString()}`;
-    if (min) return `Desde $${min.toLocaleString()}`;
-    return `Hasta $${max?.toLocaleString()}`;
-  }
+  /* ---- Loading state ---- */
 
   if (loading) {
     return (
@@ -179,184 +313,388 @@ export function ServiceRequestsPage() {
     );
   }
 
+  /* ---- Render ---- */
+
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '16px',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: '24px',
+        }}
+      >
         <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
-        <SearchInput value={search} onChange={setSearch} placeholder="Buscar solicitudes..." />
       </div>
 
-      {/* Requests Grid */}
-      {filteredRequests.length === 0 ? (
+      {/* Search bar */}
+      <div
+        style={{
+          marginBottom: '24px',
+          position: 'relative',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            padding: '12px 20px',
+            backgroundColor: '#FFFFFF',
+            borderRadius: '16px',
+            border: '2px solid #F3F4F6',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+            transition: 'border-color 0.2s',
+          }}
+          onFocus={(e) => {
+            (e.currentTarget as HTMLElement).style.borderColor = '#AA1BF1';
+          }}
+          onBlur={(e) => {
+            (e.currentTarget as HTMLElement).style.borderColor = '#F3F4F6';
+          }}
+        >
+          <Search style={{ width: '20px', height: '20px', color: '#AA1BF1', flexShrink: 0 }} />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por nombre de cliente o telefono..."
+            style={{
+              flex: 1,
+              border: 'none',
+              outline: 'none',
+              fontSize: '15px',
+              fontFamily: "'Centrale Sans Rounded', sans-serif",
+              color: '#36004E',
+              backgroundColor: 'transparent',
+            }}
+          />
+          {search && (
+            <button
+              onClick={() => setSearch('')}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: '#9CA3AF',
+                padding: '2px',
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
+              <XCircle style={{ width: '18px', height: '18px' }} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Results summary */}
+      <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <Users style={{ width: '18px', height: '18px', color: '#AA1BF1' }} />
+        <span
+          style={{
+            fontFamily: "'Centrale Sans Rounded', sans-serif",
+            fontSize: '14px',
+            color: '#6B7280',
+          }}
+        >
+          {clientGroups.length} cliente{clientGroups.length !== 1 ? 's' : ''} encontrado{clientGroups.length !== 1 ? 's' : ''} &middot;{' '}
+          {filteredRequests.length} solicitud{filteredRequests.length !== 1 ? 'es' : ''}
+        </span>
+      </div>
+
+      {/* Client list */}
+      {clientGroups.length === 0 ? (
         <Card>
           <EmptyState
             icon={<FileText style={{ width: '28px', height: '28px', color: '#9CA3AF' }} />}
-            title="No hay solicitudes"
-            description="No se encontraron solicitudes con los filtros actuales."
+            title="No hay clientes"
+            description="No se encontraron clientes con los filtros actuales."
           />
         </Card>
       ) : (
-        <div style={{ display: 'grid', gap: '16px' }}>
-          {filteredRequests.map((request) => {
-            const status = statusConfig[request.status] || statusConfig.draft;
+        <div style={{ display: 'grid', gap: '12px' }}>
+          {clientGroups.map((group) => {
+            const isExpanded = expandedClients.has(group.profile.id);
+            const name = clientFullName(group.profile);
+
             return (
-              <Card key={request.id} hover onClick={() => setSelectedRequest(request)}>
-                <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-                  {/* Left: Main Info */}
-                  <div style={{ flex: '1 1 300px', minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', marginBottom: '16px' }}>
-                      <Avatar src={request.profile?.avatar_url} name={request.profile?.first_name} size="lg" />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', marginBottom: '4px' }}>
-                          <h3
-                            style={{
-                              fontFamily: "'Isidora Alt Bold', sans-serif",
-                              fontSize: '18px',
-                              fontWeight: 'bold',
-                              color: '#36004E',
-                              margin: 0,
-                            }}
-                          >
-                            {request.service_title || request.activity}
-                          </h3>
-                          <Badge variant={status.variant}>{status.label}</Badge>
-                          {request.is_urgent && <Badge variant="error">Urgente</Badge>}
-                        </div>
-                        <p
-                          style={{
-                            fontFamily: "'Centrale Sans Rounded', sans-serif",
-                            fontSize: '14px',
-                            color: '#6B7280',
-                            margin: 0,
-                          }}
-                        >
-                          {request.profile?.first_name} {request.profile?.last_name_paterno}
-                        </p>
-                      </div>
-                    </div>
-
-                    {request.service_description && (
-                      <p
-                        style={{
-                          fontFamily: "'Centrale Sans Rounded', sans-serif",
-                          fontSize: '14px',
-                          color: '#4B5563',
-                          margin: '0 0 16px 0',
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical',
-                          overflow: 'hidden',
-                        }}
-                      >
-                        {request.service_description}
-                      </p>
+              <div
+                key={group.profile.id}
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: '16px',
+                  border: isExpanded ? '2px solid #AA1BF1' : '2px solid #F3F4F6',
+                  overflow: 'hidden',
+                  transition: 'border-color 0.2s, box-shadow 0.2s',
+                  boxShadow: isExpanded
+                    ? '0 4px 16px rgba(170,27,241,0.12)'
+                    : '0 1px 3px rgba(0,0,0,0.04)',
+                }}
+              >
+                {/* Client row (clickable) */}
+                <div
+                  onClick={() => toggleClient(group.profile.id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '16px',
+                    padding: '16px 20px',
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                    transition: 'background-color 0.15s',
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLElement).style.backgroundColor = '#FAFAFE';
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
+                  }}
+                >
+                  {/* Expand icon */}
+                  <div style={{ flexShrink: 0, color: '#AA1BF1' }}>
+                    {isExpanded ? (
+                      <ChevronDown style={{ width: '20px', height: '20px' }} />
+                    ) : (
+                      <ChevronRight style={{ width: '20px', height: '20px' }} />
                     )}
-
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <FileText style={{ width: '16px', height: '16px', color: '#9CA3AF' }} />
-                        <span style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '13px', color: '#6B7280' }}>
-                          {request.category}
-                        </span>
-                      </div>
-                      {request.location && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <MapPin style={{ width: '16px', height: '16px', color: '#9CA3AF' }} />
-                          <span style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '13px', color: '#6B7280' }}>
-                            {request.location.city}, {request.location.state}
-                          </span>
-                        </div>
-                      )}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Calendar style={{ width: '16px', height: '16px', color: '#9CA3AF' }} />
-                        <span style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '13px', color: '#6B7280' }}>
-                          {formatDate(request.scheduled_date)}
-                        </span>
-                      </div>
-                    </div>
                   </div>
 
-                  {/* Right: Stats */}
+                  {/* Avatar */}
+                  <Avatar src={group.profile.avatar_url} name={group.profile.first_name || undefined} size="lg" />
+
+                  {/* Name & phone */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <h3
+                      style={{
+                        fontFamily: "'Isidora Alt Bold', sans-serif",
+                        fontSize: '16px',
+                        fontWeight: 'bold',
+                        color: '#36004E',
+                        margin: 0,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {name}
+                    </h3>
+                    {group.profile.phone && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
+                        <Phone style={{ width: '13px', height: '13px', color: '#9CA3AF' }} />
+                        <span
+                          style={{
+                            fontFamily: "'Centrale Sans Rounded', sans-serif",
+                            fontSize: '13px',
+                            color: '#6B7280',
+                          }}
+                        >
+                          {group.profile.phone}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Request count badge */}
                   <div
                     style={{
                       display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'flex-end',
-                      gap: '12px',
-                      minWidth: '160px',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '6px 14px',
+                      borderRadius: '9999px',
+                      background: 'linear-gradient(135deg, #FF9601, #AA1BF1, #009AFF)',
+                      color: '#FFFFFF',
+                      fontFamily: "'Isidora Alt Bold', sans-serif",
+                      fontSize: '13px',
+                      fontWeight: 'bold',
+                      flexShrink: 0,
                     }}
                   >
-                    <div style={{ textAlign: 'right' }}>
-                      <p
-                        style={{
-                          fontFamily: "'Centrale Sans Rounded', sans-serif",
-                          fontSize: '12px',
-                          color: '#9CA3AF',
-                          margin: '0 0 4px 0',
-                        }}
-                      >
-                        Presupuesto
-                      </p>
-                      <p
-                        style={{
-                          fontFamily: "'Isidora Alt Bold', sans-serif",
-                          fontSize: '16px',
-                          fontWeight: 'bold',
-                          color: '#36004E',
-                          margin: 0,
-                        }}
-                      >
-                        {formatPrice(request.price_min, request.price_max)}
-                      </p>
-                    </div>
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        padding: '8px 14px',
-                        backgroundColor: '#F3F4F6',
-                        borderRadius: '10px',
-                      }}
-                    >
-                      <MessageSquare style={{ width: '16px', height: '16px', color: '#AA1BF1' }} />
-                      <span style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '14px', color: '#36004E', fontWeight: 500 }}>
-                        {request.quotes_count} cotizaciones
-                      </span>
-                    </div>
-                    <span style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '12px', color: '#9CA3AF' }}>
-                      Creada: {formatDate(request.created_at)}
-                    </span>
+                    <FileText style={{ width: '14px', height: '14px' }} />
+                    {group.requests.length} solicitud{group.requests.length !== 1 ? 'es' : ''}
                   </div>
                 </div>
-              </Card>
+
+                {/* Expanded: list of requests */}
+                {isExpanded && (
+                  <div
+                    style={{
+                      borderTop: '1px solid #F3F4F6',
+                      backgroundColor: '#FAFAFE',
+                    }}
+                  >
+                    {group.requests.map((request, idx) => {
+                      return (
+                        <div
+                          key={request.id}
+                          onClick={() => setSelectedRequest(request)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '16px',
+                            padding: '14px 20px 14px 72px',
+                            cursor: 'pointer',
+                            borderBottom: idx < group.requests.length - 1 ? '1px solid #F0F0F4' : 'none',
+                            transition: 'background-color 0.15s',
+                          }}
+                          onMouseEnter={(e) => {
+                            (e.currentTarget as HTMLElement).style.backgroundColor = '#F3EEFF';
+                          }}
+                          onMouseLeave={(e) => {
+                            (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
+                          }}
+                        >
+                          {/* Category & Activity */}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p
+                              style={{
+                                fontFamily: "'Isidora Alt Bold', sans-serif",
+                                fontSize: '14px',
+                                fontWeight: 'bold',
+                                color: '#36004E',
+                                margin: 0,
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                              }}
+                            >
+                              {request.service_title || request.activity || 'Sin titulo'}
+                            </p>
+                            <p
+                              style={{
+                                fontFamily: "'Centrale Sans Rounded', sans-serif",
+                                fontSize: '12px',
+                                color: '#9CA3AF',
+                                margin: '2px 0 0 0',
+                              }}
+                            >
+                              {[request.category, request.activity].filter(Boolean).join(' · ')}
+                            </p>
+                          </div>
+
+                          {/* Status badge */}
+                          <div style={{ flexShrink: 0 }}>{getStatusBadge(request.status)}</div>
+
+                          {/* Price range */}
+                          <div style={{ flexShrink: 0, textAlign: 'right', minWidth: '120px' }}>
+                            <span
+                              style={{
+                                fontFamily: "'Centrale Sans Rounded', sans-serif",
+                                fontSize: '13px',
+                                color: '#36004E',
+                                fontWeight: 500,
+                              }}
+                            >
+                              {formatPrice(request.price_min, request.price_max)}
+                            </span>
+                          </div>
+
+                          {/* Date */}
+                          <div style={{ flexShrink: 0, minWidth: '90px', textAlign: 'right' }}>
+                            <span
+                              style={{
+                                fontFamily: "'Centrale Sans Rounded', sans-serif",
+                                fontSize: '12px',
+                                color: '#9CA3AF',
+                              }}
+                            >
+                              {formatDate(request.created_at)}
+                            </span>
+                          </div>
+
+                          {/* Urgent flag */}
+                          {request.is_urgent && (
+                            <span
+                              style={{
+                                display: 'inline-block',
+                                padding: '2px 8px',
+                                borderRadius: '9999px',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                fontFamily: "'Centrale Sans Rounded', sans-serif",
+                                backgroundColor: '#FEE2E2',
+                                color: '#B91C1C',
+                                flexShrink: 0,
+                              }}
+                            >
+                              Urgente
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
       )}
 
       {/* Detail Modal */}
-      <Modal isOpen={!!selectedRequest} onClose={() => setSelectedRequest(null)} title="Detalle de Solicitud" size="lg">
+      <Modal
+        isOpen={!!selectedRequest}
+        onClose={() => setSelectedRequest(null)}
+        title="Detalle de Solicitud"
+        size="lg"
+      >
         {selectedRequest && (
           <div>
             {/* Header */}
-            <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', paddingBottom: '24px', borderBottom: '1px solid #F3F4F6' }}>
-              <Avatar src={selectedRequest.profile?.avatar_url} name={selectedRequest.profile?.first_name} size="xl" />
+            <div
+              style={{
+                display: 'flex',
+                gap: '16px',
+                marginBottom: '24px',
+                paddingBottom: '24px',
+                borderBottom: '1px solid #F3F4F6',
+              }}
+            >
+              <Avatar
+                src={selectedRequest.profile?.avatar_url}
+                name={selectedRequest.profile?.first_name || undefined}
+                size="xl"
+              />
               <div style={{ flex: 1 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-                  <h3 style={{ fontFamily: "'Isidora Alt Bold', sans-serif", fontSize: '22px', color: '#36004E', margin: 0 }}>
+                  <h3
+                    style={{
+                      fontFamily: "'Isidora Alt Bold', sans-serif",
+                      fontSize: '22px',
+                      color: '#36004E',
+                      margin: 0,
+                    }}
+                  >
                     {selectedRequest.service_title || selectedRequest.activity}
                   </h3>
-                  <Badge variant={statusConfig[selectedRequest.status]?.variant}>
-                    {statusConfig[selectedRequest.status]?.label}
+                  <Badge variant={statusBadgeVariant[selectedRequest.status] || 'default'}>
+                    {(statusConfig[selectedRequest.status] || statusConfig.draft).label}
                   </Badge>
                 </div>
-                <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '15px', color: '#6B7280', margin: 0 }}>
-                  Cliente: {selectedRequest.profile?.first_name} {selectedRequest.profile?.last_name_paterno}
+                <p
+                  style={{
+                    fontFamily: "'Centrale Sans Rounded', sans-serif",
+                    fontSize: '15px',
+                    color: '#6B7280',
+                    margin: 0,
+                  }}
+                >
+                  Cliente: {clientFullName(selectedRequest.profile || ({} as Profile))}
                 </p>
                 {selectedRequest.profile?.phone && (
-                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '14px', color: '#9CA3AF', margin: '4px 0 0 0' }}>
+                  <p
+                    style={{
+                      fontFamily: "'Centrale Sans Rounded', sans-serif",
+                      fontSize: '14px',
+                      color: '#9CA3AF',
+                      margin: '4px 0 0 0',
+                    }}
+                  >
                     Tel: {selectedRequest.profile.phone}
                   </p>
                 )}
@@ -365,22 +703,60 @@ export function ServiceRequestsPage() {
 
             {/* Description */}
             <div style={{ marginBottom: '24px' }}>
-              <h4 style={{ fontFamily: "'Isidora Alt Bold', sans-serif", fontSize: '16px', color: '#36004E', margin: '0 0 12px 0' }}>
+              <h4
+                style={{
+                  fontFamily: "'Isidora Alt Bold', sans-serif",
+                  fontSize: '16px',
+                  color: '#36004E',
+                  margin: '0 0 12px 0',
+                }}
+              >
                 Descripcion
               </h4>
-              <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '14px', color: '#4B5563', margin: 0, lineHeight: 1.6 }}>
+              <p
+                style={{
+                  fontFamily: "'Centrale Sans Rounded', sans-serif",
+                  fontSize: '14px',
+                  color: '#4B5563',
+                  margin: 0,
+                  lineHeight: 1.6,
+                }}
+              >
                 {selectedRequest.service_description || selectedRequest.description || 'Sin descripcion'}
               </p>
             </div>
 
             {/* Details Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gap: '16px',
+                marginBottom: '24px',
+              }}
+            >
               <div style={{ padding: '16px', backgroundColor: '#F9FAFB', borderRadius: '12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                   <FileText style={{ width: '18px', height: '18px', color: '#AA1BF1' }} />
-                  <span style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '13px', color: '#6B7280' }}>Categoria</span>
+                  <span
+                    style={{
+                      fontFamily: "'Centrale Sans Rounded', sans-serif",
+                      fontSize: '13px',
+                      color: '#6B7280',
+                    }}
+                  >
+                    Categoria
+                  </span>
                 </div>
-                <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '15px', color: '#36004E', fontWeight: 500, margin: 0 }}>
+                <p
+                  style={{
+                    fontFamily: "'Centrale Sans Rounded', sans-serif",
+                    fontSize: '15px',
+                    color: '#36004E',
+                    fontWeight: 500,
+                    margin: 0,
+                  }}
+                >
                   {selectedRequest.category}
                 </p>
               </div>
@@ -388,9 +764,25 @@ export function ServiceRequestsPage() {
               <div style={{ padding: '16px', backgroundColor: '#F9FAFB', borderRadius: '12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                   <DollarSign style={{ width: '18px', height: '18px', color: '#22C55E' }} />
-                  <span style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '13px', color: '#6B7280' }}>Presupuesto</span>
+                  <span
+                    style={{
+                      fontFamily: "'Centrale Sans Rounded', sans-serif",
+                      fontSize: '13px',
+                      color: '#6B7280',
+                    }}
+                  >
+                    Presupuesto
+                  </span>
                 </div>
-                <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '15px', color: '#36004E', fontWeight: 500, margin: 0 }}>
+                <p
+                  style={{
+                    fontFamily: "'Centrale Sans Rounded', sans-serif",
+                    fontSize: '15px',
+                    color: '#36004E',
+                    fontWeight: 500,
+                    margin: 0,
+                  }}
+                >
                   {formatPrice(selectedRequest.price_min, selectedRequest.price_max)}
                 </p>
               </div>
@@ -398,9 +790,25 @@ export function ServiceRequestsPage() {
               <div style={{ padding: '16px', backgroundColor: '#F9FAFB', borderRadius: '12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                   <Calendar style={{ width: '18px', height: '18px', color: '#FF9601' }} />
-                  <span style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '13px', color: '#6B7280' }}>Fecha Programada</span>
+                  <span
+                    style={{
+                      fontFamily: "'Centrale Sans Rounded', sans-serif",
+                      fontSize: '13px',
+                      color: '#6B7280',
+                    }}
+                  >
+                    Fecha Programada
+                  </span>
                 </div>
-                <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '15px', color: '#36004E', fontWeight: 500, margin: 0 }}>
+                <p
+                  style={{
+                    fontFamily: "'Centrale Sans Rounded', sans-serif",
+                    fontSize: '15px',
+                    color: '#36004E',
+                    fontWeight: 500,
+                    margin: 0,
+                  }}
+                >
                   {formatDate(selectedRequest.scheduled_date)}
                 </p>
               </div>
@@ -408,43 +816,45 @@ export function ServiceRequestsPage() {
               <div style={{ padding: '16px', backgroundColor: '#F9FAFB', borderRadius: '12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                   <Clock style={{ width: '18px', height: '18px', color: '#009AFF' }} />
-                  <span style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '13px', color: '#6B7280' }}>Horario</span>
+                  <span
+                    style={{
+                      fontFamily: "'Centrale Sans Rounded', sans-serif",
+                      fontSize: '13px',
+                      color: '#6B7280',
+                    }}
+                  >
+                    Horario
+                  </span>
                 </div>
-                <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '15px', color: '#36004E', fontWeight: 500, margin: 0 }}>
+                <p
+                  style={{
+                    fontFamily: "'Centrale Sans Rounded', sans-serif",
+                    fontSize: '15px',
+                    color: '#36004E',
+                    fontWeight: 500,
+                    margin: 0,
+                  }}
+                >
                   {selectedRequest.time_start || selectedRequest.time_preference || 'Flexible'}
                 </p>
               </div>
             </div>
 
-            {/* Location */}
-            {selectedRequest.location && (
-              <div style={{ marginBottom: '24px' }}>
-                <h4 style={{ fontFamily: "'Isidora Alt Bold', sans-serif", fontSize: '16px', color: '#36004E', margin: '0 0 12px 0' }}>
-                  Ubicacion
-                </h4>
-                <div style={{ padding: '16px', backgroundColor: '#F9FAFB', borderRadius: '12px', display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                  <MapPin style={{ width: '20px', height: '20px', color: '#EF4444', flexShrink: 0, marginTop: '2px' }} />
-                  <div>
-                    <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '15px', color: '#36004E', margin: '0 0 4px 0' }}>
-                      {selectedRequest.location.street} {selectedRequest.location.ext_number}
-                      {selectedRequest.location.int_number && `, Int. ${selectedRequest.location.int_number}`}
-                    </p>
-                    <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '14px', color: '#6B7280', margin: 0 }}>
-                      {selectedRequest.location.neighborhood}, {selectedRequest.location.city}, {selectedRequest.location.state}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Evidence Images */}
             {selectedRequest.evidence_urls && selectedRequest.evidence_urls.length > 0 && (
               <div style={{ marginBottom: '24px' }}>
-                <h4 style={{ fontFamily: "'Isidora Alt Bold', sans-serif", fontSize: '16px', color: '#36004E', margin: '0 0 12px 0' }}>
+                <h4
+                  style={{
+                    fontFamily: "'Isidora Alt Bold', sans-serif",
+                    fontSize: '16px',
+                    color: '#36004E',
+                    margin: '0 0 12px 0',
+                  }}
+                >
                   Evidencias ({selectedRequest.evidence_urls.length})
                 </h4>
                 <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                  {selectedRequest.evidence_urls.map((url, index) => (
+                  {selectedRequest.evidence_urls.map((url: string, index: number) => (
                     <a
                       key={index}
                       href={url}
@@ -466,8 +876,7 @@ export function ServiceRequestsPage() {
                         alt={`Evidencia ${index + 1}`}
                         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                         onError={(e) => {
-                          e.currentTarget.style.display = 'none';
-                          e.currentTarget.parentElement!.innerHTML = '<div style="color: #9CA3AF"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div>';
+                          (e.currentTarget as HTMLImageElement).style.display = 'none';
                         }}
                       />
                     </a>
@@ -477,7 +886,15 @@ export function ServiceRequestsPage() {
             )}
 
             {/* Actions */}
-            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', paddingTop: '24px', borderTop: '1px solid #F3F4F6' }}>
+            <div
+              style={{
+                display: 'flex',
+                gap: '12px',
+                flexWrap: 'wrap',
+                paddingTop: '24px',
+                borderTop: '1px solid #F3F4F6',
+              }}
+            >
               {selectedRequest.status === 'active' && (
                 <>
                   <Button

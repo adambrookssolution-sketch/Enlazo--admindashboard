@@ -1,176 +1,264 @@
 import { useEffect, useState } from 'react';
-import {
-  Star,
-  ThumbsUp,
-  ThumbsDown,
-  Trash2,
-} from 'lucide-react';
+import { Star, ChevronDown, ChevronUp } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { Card, Badge, SearchInput, Tabs, Modal, Button, EmptyState, Avatar } from '../components/ui';
-import type { Tables } from '../types/database';
+import { SearchInput, EmptyState } from '../components/ui';
 
-type Review = Tables<'reviews'> & {
-  client_profile?: Tables<'profiles'> | null;
-  specialist_profile?: Tables<'specialist_profiles'> | null;
-  specialist_user_profile?: Tables<'profiles'> | null;
-  service_request?: Tables<'service_requests'> | null;
-};
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
 
-type ClientReview = Tables<'client_reviews'> & {
-  specialist_profile?: Tables<'specialist_profiles'> | null;
-  specialist_user_profile?: Tables<'profiles'> | null;
-  client_profile?: Tables<'profiles'> | null;
-  service_request?: Tables<'service_requests'> | null;
-};
+interface SpecialistRow {
+  specialistId: string;
+  name: string;
+  completedJobs: number;
+  avgRating: number;
+  avgCalidad: number;
+  avgCumplimiento: number;
+  avgProfesionalismo: number;
+  avgPuntualidad: number;
+  avgRelacionCalidad: number;
+  volveriaPercent: number;
+  reviews: any[];
+}
+
+interface ClientRow {
+  clientId: string;
+  name: string;
+  completedJobs: number;
+  avgRating: number;
+  avgClaridad: number;
+  avgCumplimientoPago: number;
+  avgPuntualidad: number;
+  avgRespeto: number;
+  avgFacilito: number;
+  volveriaPercent: number;
+  reviews: any[];
+}
+
+/* ------------------------------------------------------------------ */
+/*  Component                                                          */
+/* ------------------------------------------------------------------ */
 
 export function ReviewsPage() {
-  const [specialistReviews, setSpecialistReviews] = useState<Review[]>([]);
-  const [clientReviews, setClientReviews] = useState<ClientReview[]>([]);
+  const [specialistRows, setSpecialistRows] = useState<SpecialistRow[]>([]);
+  const [clientRows, setClientRows] = useState<ClientRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [activeTab, setActiveTab] = useState('specialists');
-  const [selectedReview, setSelectedReview] = useState<Review | ClientReview | null>(null);
-  const [reviewType, setReviewType] = useState<'specialist' | 'client'>('specialist');
+  const [activeTab, setActiveTab] = useState<'specialists' | 'clients'>('specialists');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
-    loadReviews();
+    loadData();
   }, []);
 
-  async function loadReviews() {
+  /* ---- data loading ---- */
+
+  async function loadData() {
     try {
       setLoading(true);
-
-      // Load specialist reviews (from clients about specialists)
-      const { data: specReviews } = await supabase
-        .from('reviews')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      const enrichedSpecReviews = await Promise.all(
-        (specReviews || []).map(async (review) => {
-          const [clientResult, specialistResult, requestResult] = await Promise.all([
-            supabase.from('profiles').select('*').eq('id', review.user_id).single(),
-            supabase.from('specialist_profiles').select('*').eq('id', review.specialist_id).single(),
-            supabase.from('service_requests').select('*').eq('id', review.request_id).single(),
-          ]);
-
-          let specialistUserProfile = null;
-          if (specialistResult.data?.user_id) {
-            const { data } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', specialistResult.data.user_id)
-              .single();
-            specialistUserProfile = data;
-          }
-
-          return {
-            ...review,
-            client_profile: clientResult.data,
-            specialist_profile: specialistResult.data,
-            specialist_user_profile: specialistUserProfile,
-            service_request: requestResult.data,
-          };
-        })
-      );
-
-      setSpecialistReviews(enrichedSpecReviews);
-
-      // Load client reviews (from specialists about clients)
-      const { data: cliReviews } = await supabase
-        .from('client_reviews')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      const enrichedClientReviews = await Promise.all(
-        (cliReviews || []).map(async (review) => {
-          const [clientResult, specialistResult] = await Promise.all([
-            supabase.from('profiles').select('*').eq('id', review.client_id).single(),
-            supabase.from('specialist_profiles').select('*').eq('id', review.specialist_id).single(),
-          ]);
-
-          let specialistUserProfile = null;
-          if (specialistResult.data?.user_id) {
-            const { data } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', specialistResult.data.user_id)
-              .single();
-            specialistUserProfile = data;
-          }
-
-          return {
-            ...review,
-            client_profile: clientResult.data,
-            specialist_profile: specialistResult.data,
-            specialist_user_profile: specialistUserProfile,
-          };
-        })
-      );
-
-      setClientReviews(enrichedClientReviews);
-    } catch (error) {
-      console.error('Error loading reviews:', error);
+      await Promise.all([loadSpecialistData(), loadClientData()]);
+    } catch (err) {
+      console.error('Error loading reviews:', err);
     } finally {
       setLoading(false);
     }
   }
 
-  async function deleteReview(reviewId: string, type: 'specialist' | 'client') {
-    try {
-      const table = type === 'specialist' ? 'reviews' : 'client_reviews';
-      const { error } = await supabase.from(table).delete().eq('id', reviewId);
+  async function loadSpecialistData() {
+    // 1. All specialist reviews
+    const { data: reviews } = await supabase
+      .from('reviews')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-      if (error) throw error;
-
-      loadReviews();
-      setSelectedReview(null);
-    } catch (error) {
-      console.error('Error deleting review:', error);
+    if (!reviews || reviews.length === 0) {
+      setSpecialistRows([]);
+      return;
     }
+
+    // 2. Group by specialist_id
+    const grouped: Record<string, any[]> = {};
+    for (const r of reviews) {
+      const sid = r.specialist_id;
+      if (!sid) continue;
+      if (!grouped[sid]) grouped[sid] = [];
+      grouped[sid].push(r);
+    }
+
+    // 3. Build rows
+    const rows: SpecialistRow[] = [];
+
+    for (const [specialistId, revs] of Object.entries(grouped)) {
+      // Get specialist profile -> user_id -> profile name
+      const { data: sp } = await supabase
+        .from('specialist_profiles')
+        .select('*')
+        .eq('id', specialistId)
+        .single();
+
+      let name = 'Especialista desconocido';
+      if (sp?.user_id) {
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', sp.user_id)
+          .single();
+        if (prof) {
+          name = [prof.first_name, prof.last_name_paterno, prof.last_name_materno]
+            .filter(Boolean)
+            .join(' ');
+        }
+      }
+
+      // Completed jobs for this specialist
+      const { count: completedJobs } = await supabase
+        .from('service_requests')
+        .select('*', { count: 'exact', head: true })
+        .eq('specialist_id', specialistId)
+        .eq('status', 'completed');
+
+      // Enrich each review with reviewer name
+      const enrichedRevs: any[] = [];
+      for (const rev of revs) {
+        let reviewerName = 'Cliente desconocido';
+        if (rev.user_id) {
+          const { data: rp } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', rev.user_id)
+            .single();
+          if (rp) {
+            reviewerName = [rp.first_name, rp.last_name_paterno].filter(Boolean).join(' ');
+          }
+        }
+        enrichedRevs.push({ ...rev, reviewerName });
+      }
+
+      const avg = (field: string) => {
+        const vals = revs.map((r: any) => r[field]).filter((v: any) => v != null && typeof v === 'number');
+        return vals.length > 0 ? vals.reduce((a: number, b: number) => a + b, 0) / vals.length : 0;
+      };
+
+      const volveriaCount = revs.filter((r: any) => r.volveria_trabajar === true).length;
+      const volveriaTotal = revs.filter((r: any) => r.volveria_trabajar === true || r.volveria_trabajar === false).length;
+
+      rows.push({
+        specialistId,
+        name,
+        completedJobs: completedJobs || 0,
+        avgRating: avg('average_score') || avg('rating'),
+        avgCalidad: avg('calidad_trabajo'),
+        avgCumplimiento: avg('cumplimiento_servicio'),
+        avgProfesionalismo: avg('profesionalismo'),
+        avgPuntualidad: avg('puntualidad'),
+        avgRelacionCalidad: avg('relacion_calidad_precio'),
+        volveriaPercent: volveriaTotal > 0 ? (volveriaCount / volveriaTotal) * 100 : 0,
+        reviews: enrichedRevs,
+      });
+    }
+
+    rows.sort((a, b) => a.name.localeCompare(b.name));
+    setSpecialistRows(rows);
   }
 
-  const filteredSpecialistReviews = specialistReviews.filter((review) => {
-    if (!search) return true;
-    const searchLower = search.toLowerCase();
-    return (
-      review.comment?.toLowerCase().includes(searchLower) ||
-      review.client_profile?.first_name?.toLowerCase().includes(searchLower) ||
-      review.specialist_user_profile?.first_name?.toLowerCase().includes(searchLower)
-    );
-  });
+  async function loadClientData() {
+    // 1. All client reviews
+    const { data: reviews } = await supabase
+      .from('client_reviews')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-  const filteredClientReviews = clientReviews.filter((review) => {
-    if (!search) return true;
-    const searchLower = search.toLowerCase();
-    return (
-      review.client_profile?.first_name?.toLowerCase().includes(searchLower) ||
-      review.specialist_user_profile?.first_name?.toLowerCase().includes(searchLower)
-    );
-  });
+    if (!reviews || reviews.length === 0) {
+      setClientRows([]);
+      return;
+    }
 
-  const tabs = [
-    { id: 'specialists', label: 'Resenas de Especialistas', count: specialistReviews.length },
-    { id: 'clients', label: 'Resenas de Clientes', count: clientReviews.length },
-  ];
+    // 2. Group by client_id
+    const grouped: Record<string, any[]> = {};
+    for (const r of reviews) {
+      const cid = r.client_id;
+      if (!cid) continue;
+      if (!grouped[cid]) grouped[cid] = [];
+      grouped[cid].push(r);
+    }
 
-  function renderStars(rating: number) {
-    return (
-      <div style={{ display: 'flex', gap: '2px' }}>
-        {[1, 2, 3, 4, 5].map((star) => (
-          <Star
-            key={star}
-            style={{
-              width: '16px',
-              height: '16px',
-              fill: star <= rating ? '#FBBF24' : 'transparent',
-              color: star <= rating ? '#FBBF24' : '#D1D5DB',
-            }}
-          />
-        ))}
-      </div>
-    );
+    // 3. Build rows
+    const rows: ClientRow[] = [];
+
+    for (const [clientId, revs] of Object.entries(grouped)) {
+      // Get client profile name
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', clientId)
+        .single();
+
+      let name = 'Cliente desconocido';
+      if (prof) {
+        name = [prof.first_name, prof.last_name_paterno, prof.last_name_materno]
+          .filter(Boolean)
+          .join(' ');
+      }
+
+      // Completed jobs for this client
+      const { count: completedJobs } = await supabase
+        .from('service_requests')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', clientId)
+        .eq('status', 'completed');
+
+      // Enrich each review with reviewer (specialist) name
+      const enrichedRevs: any[] = [];
+      for (const rev of revs) {
+        let reviewerName = 'Especialista desconocido';
+        if (rev.specialist_id) {
+          const { data: sp } = await supabase
+            .from('specialist_profiles')
+            .select('*')
+            .eq('id', rev.specialist_id)
+            .single();
+          if (sp?.user_id) {
+            const { data: rp } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', sp.user_id)
+              .single();
+            if (rp) {
+              reviewerName = [rp.first_name, rp.last_name_paterno].filter(Boolean).join(' ');
+            }
+          }
+        }
+        enrichedRevs.push({ ...rev, reviewerName });
+      }
+
+      const avg = (field: string) => {
+        const vals = revs.map((r: any) => r[field]).filter((v: any) => v != null && typeof v === 'number');
+        return vals.length > 0 ? vals.reduce((a: number, b: number) => a + b, 0) / vals.length : 0;
+      };
+
+      const volveriaCount = revs.filter((r: any) => r.volveria_trabajar_con_cliente === true).length;
+      const volveriaTotal = revs.filter((r: any) => r.volveria_trabajar_con_cliente === true || r.volveria_trabajar_con_cliente === false).length;
+
+      rows.push({
+        clientId,
+        name,
+        completedJobs: completedJobs || 0,
+        avgRating: avg('average_score'),
+        avgClaridad: avg('claridad_necesidades'),
+        avgCumplimientoPago: avg('claridad_cumplimiento_pago'),
+        avgPuntualidad: avg('puntualidad_disponibilidad'),
+        avgRespeto: avg('respeto_profesionalismo_cliente'),
+        avgFacilito: avg('facilito_condiciones_trabajo'),
+        volveriaPercent: volveriaTotal > 0 ? (volveriaCount / volveriaTotal) * 100 : 0,
+        reviews: enrichedRevs,
+      });
+    }
+
+    rows.sort((a, b) => a.name.localeCompare(b.name));
+    setClientRows(rows);
   }
+
+  /* ---- helpers ---- */
 
   function formatDate(dateString: string) {
     return new Date(dateString).toLocaleDateString('es-MX', {
@@ -179,6 +267,74 @@ export function ReviewsPage() {
       year: 'numeric',
     });
   }
+
+  function renderStars(rating: number) {
+    return (
+      <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
+        {[1, 2, 3, 4, 5].map((star) => (
+          <Star
+            key={star}
+            style={{
+              width: '14px',
+              height: '14px',
+              fill: star <= Math.round(rating) ? '#FBBF24' : 'transparent',
+              color: star <= Math.round(rating) ? '#FBBF24' : '#D1D5DB',
+            }}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  function fmtNum(n: number) {
+    return n.toFixed(1);
+  }
+
+  /* ---- filtering ---- */
+
+  const filteredSpecialists = specialistRows.filter((row) => {
+    if (!search) return true;
+    return row.name.toLowerCase().includes(search.toLowerCase());
+  });
+
+  const filteredClients = clientRows.filter((row) => {
+    if (!search) return true;
+    return row.name.toLowerCase().includes(search.toLowerCase());
+  });
+
+  /* ---- styles ---- */
+
+  const fontBody: React.CSSProperties = { fontFamily: "'Centrale Sans Rounded', sans-serif" };
+  const fontHeader: React.CSSProperties = { fontFamily: "'Isidora Alt Bold', sans-serif" };
+
+  const thStyle: React.CSSProperties = {
+    ...fontHeader,
+    fontSize: '13px',
+    color: '#FFFFFF',
+    backgroundColor: '#36004E',
+    padding: '12px 14px',
+    textAlign: 'left',
+    whiteSpace: 'nowrap',
+  };
+
+  const tdStyle: React.CSSProperties = {
+    ...fontBody,
+    fontSize: '14px',
+    color: '#36004E',
+    padding: '12px 14px',
+    borderBottom: '1px solid #F3F4F6',
+    whiteSpace: 'nowrap',
+  };
+
+  const rowHoverBg = '#F9F5FD';
+
+  /* ---- toggle expand ---- */
+
+  function toggleExpand(id: string) {
+    setExpandedId((prev) => (prev === id ? null : id));
+  }
+
+  /* ---- render ---- */
 
   if (loading) {
     return (
@@ -201,440 +357,487 @@ export function ReviewsPage() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
-        <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
-        <SearchInput value={search} onChange={setSearch} placeholder="Buscar resenas..." />
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '16px',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: '24px',
+        }}
+      >
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: '0' }}>
+          <button
+            onClick={() => { setActiveTab('specialists'); setExpandedId(null); }}
+            style={{
+              ...fontHeader,
+              fontSize: '15px',
+              padding: '10px 24px',
+              border: 'none',
+              cursor: 'pointer',
+              borderRadius: '8px 0 0 8px',
+              backgroundColor: activeTab === 'specialists' ? '#36004E' : '#F3F4F6',
+              color: activeTab === 'specialists' ? '#FFFFFF' : '#6B7280',
+              transition: 'all 0.2s',
+            }}
+          >
+            Especialistas ({specialistRows.length})
+          </button>
+          <button
+            onClick={() => { setActiveTab('clients'); setExpandedId(null); }}
+            style={{
+              ...fontHeader,
+              fontSize: '15px',
+              padding: '10px 24px',
+              border: 'none',
+              cursor: 'pointer',
+              borderRadius: '0 8px 8px 0',
+              backgroundColor: activeTab === 'clients' ? '#36004E' : '#F3F4F6',
+              color: activeTab === 'clients' ? '#FFFFFF' : '#6B7280',
+              transition: 'all 0.2s',
+            }}
+          >
+            Clientes ({clientRows.length})
+          </button>
+        </div>
+
+        <SearchInput value={search} onChange={setSearch} placeholder="Buscar por nombre..." />
       </div>
 
-      {/* Specialist Reviews */}
+      {/* ============ SPECIALIST TAB ============ */}
       {activeTab === 'specialists' && (
         <>
-          {filteredSpecialistReviews.length === 0 ? (
-            <Card>
+          {filteredSpecialists.length === 0 ? (
+            <div style={{ padding: '48px', textAlign: 'center', backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #F3F4F6' }}>
               <EmptyState
                 icon={<Star style={{ width: '28px', height: '28px', color: '#9CA3AF' }} />}
-                title="No hay resenas"
-                description="No se encontraron resenas de especialistas."
+                title="No hay resenas de especialistas"
+                description="No se encontraron resenas."
               />
-            </Card>
+            </div>
           ) : (
-            <div style={{ display: 'grid', gap: '16px' }}>
-              {filteredSpecialistReviews.map((review) => (
-                <Card
-                  key={review.id}
-                  hover
-                  onClick={() => {
-                    setSelectedReview(review);
-                    setReviewType('specialist');
-                  }}
-                >
-                  <div style={{ display: 'flex', gap: '16px' }}>
-                    {/* Client Info */}
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', flex: 1 }}>
-                      <Avatar src={review.client_profile?.avatar_url} name={review.client_profile?.first_name} size="lg" />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                          <span style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '15px', fontWeight: 500, color: '#36004E' }}>
-                            {review.client_profile?.first_name} {review.client_profile?.last_name_paterno}
-                          </span>
-                          <span style={{ color: '#9CA3AF' }}>→</span>
-                          <span style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '15px', color: '#6B7280' }}>
-                            {review.specialist_user_profile?.first_name}
-                          </span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-                          {renderStars(review.rating)}
-                          <span style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '14px', fontWeight: 600, color: '#FBBF24' }}>
-                            {review.rating.toFixed(1)}
-                          </span>
-                          {review.volveria_trabajar !== null && (
-                            <Badge variant={review.volveria_trabajar ? 'success' : 'error'} size="sm">
-                              {review.volveria_trabajar ? 'Volveria a contratar' : 'No volveria'}
-                            </Badge>
-                          )}
-                        </div>
-                        {review.comment && (
-                          <p
-                            style={{
-                              fontFamily: "'Centrale Sans Rounded', sans-serif",
-                              fontSize: '14px',
-                              color: '#4B5563',
-                              margin: 0,
-                              display: '-webkit-box',
-                              WebkitLineClamp: 2,
-                              WebkitBoxOrient: 'vertical',
-                              overflow: 'hidden',
-                            }}
-                          >
-                            "{review.comment}"
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Service & Date */}
-                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                      <Badge variant="info" size="sm">{review.service_request?.category}</Badge>
-                      <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '12px', color: '#9CA3AF', margin: '8px 0 0 0' }}>
-                        {formatDate(review.created_at)}
-                      </p>
-                    </div>
-                  </div>
-                </Card>
-              ))}
+            <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid #E5E7EB' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#FFFFFF' }}>
+                <thead>
+                  <tr>
+                    <th style={thStyle}></th>
+                    <th style={thStyle}>Usuario</th>
+                    <th style={{ ...thStyle, textAlign: 'center' }}>Trabajos completados</th>
+                    <th style={{ ...thStyle, textAlign: 'center' }}>Resena Global</th>
+                    <th style={{ ...thStyle, textAlign: 'center' }}>Calidad Trabajo</th>
+                    <th style={{ ...thStyle, textAlign: 'center' }}>Cumplimiento Servicio</th>
+                    <th style={{ ...thStyle, textAlign: 'center' }}>Profesionalismo</th>
+                    <th style={{ ...thStyle, textAlign: 'center' }}>Puntualidad</th>
+                    <th style={{ ...thStyle, textAlign: 'center' }}>Relacion Calidad/Precio</th>
+                    <th style={{ ...thStyle, textAlign: 'center' }}>Volveria %</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredSpecialists.map((row) => {
+                    const isExpanded = expandedId === row.specialistId;
+                    return (
+                      <SpecialistRowBlock
+                        key={row.specialistId}
+                        row={row}
+                        isExpanded={isExpanded}
+                        onToggle={() => toggleExpand(row.specialistId)}
+                        tdStyle={tdStyle}
+                        fontBody={fontBody}
+                        fontHeader={fontHeader}
+                        rowHoverBg={rowHoverBg}
+                        renderStars={renderStars}
+                        formatDate={formatDate}
+                        fmtNum={fmtNum}
+                      />
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </>
       )}
 
-      {/* Client Reviews */}
+      {/* ============ CLIENT TAB ============ */}
       {activeTab === 'clients' && (
         <>
-          {filteredClientReviews.length === 0 ? (
-            <Card>
+          {filteredClients.length === 0 ? (
+            <div style={{ padding: '48px', textAlign: 'center', backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px solid #F3F4F6' }}>
               <EmptyState
                 icon={<Star style={{ width: '28px', height: '28px', color: '#9CA3AF' }} />}
-                title="No hay resenas"
-                description="No se encontraron resenas de clientes."
+                title="No hay resenas de clientes"
+                description="No se encontraron resenas."
               />
-            </Card>
+            </div>
           ) : (
-            <div style={{ display: 'grid', gap: '16px' }}>
-              {filteredClientReviews.map((review) => (
-                <Card
-                  key={review.id}
-                  hover
-                  onClick={() => {
-                    setSelectedReview(review);
-                    setReviewType('client');
-                  }}
-                >
-                  <div style={{ display: 'flex', gap: '16px' }}>
-                    {/* Specialist Info */}
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', flex: 1 }}>
-                      <Avatar
-                        src={review.specialist_user_profile?.avatar_url}
-                        name={review.specialist_user_profile?.first_name}
-                        size="lg"
+            <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid #E5E7EB' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#FFFFFF' }}>
+                <thead>
+                  <tr>
+                    <th style={thStyle}></th>
+                    <th style={thStyle}>Usuario</th>
+                    <th style={{ ...thStyle, textAlign: 'center' }}>Trabajos completados</th>
+                    <th style={{ ...thStyle, textAlign: 'center' }}>Resena Global</th>
+                    <th style={{ ...thStyle, textAlign: 'center' }}>Claridad Necesidades</th>
+                    <th style={{ ...thStyle, textAlign: 'center' }}>Cumplimiento Pago</th>
+                    <th style={{ ...thStyle, textAlign: 'center' }}>Puntualidad</th>
+                    <th style={{ ...thStyle, textAlign: 'center' }}>Respeto/Profesionalismo</th>
+                    <th style={{ ...thStyle, textAlign: 'center' }}>Facilito Condiciones</th>
+                    <th style={{ ...thStyle, textAlign: 'center' }}>Volveria %</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredClients.map((row) => {
+                    const isExpanded = expandedId === row.clientId;
+                    return (
+                      <ClientRowBlock
+                        key={row.clientId}
+                        row={row}
+                        isExpanded={isExpanded}
+                        onToggle={() => toggleExpand(row.clientId)}
+                        tdStyle={tdStyle}
+                        fontBody={fontBody}
+                        fontHeader={fontHeader}
+                        rowHoverBg={rowHoverBg}
+                        renderStars={renderStars}
+                        formatDate={formatDate}
+                        fmtNum={fmtNum}
                       />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                          <span style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '15px', fontWeight: 500, color: '#36004E' }}>
-                            {review.specialist_user_profile?.first_name} {review.specialist_user_profile?.last_name_paterno}
-                          </span>
-                          <span style={{ color: '#9CA3AF' }}>→</span>
-                          <span style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '15px', color: '#6B7280' }}>
-                            {review.client_profile?.first_name}
-                          </span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-                          {renderStars(review.average_score || 0)}
-                          <span style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '14px', fontWeight: 600, color: '#FBBF24' }}>
-                            {(review.average_score || 0).toFixed(1)}
-                          </span>
-                          {review.volveria_trabajar_con_cliente !== undefined && (
-                            <Badge variant={review.volveria_trabajar_con_cliente ? 'success' : 'error'} size="sm">
-                              {review.volveria_trabajar_con_cliente ? 'Volveria a trabajar' : 'No volveria'}
-                            </Badge>
-                          )}
-                        </div>
-                        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                          <span style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '13px', color: '#6B7280' }}>
-                            Claridad: {review.claridad_necesidades}/5
-                          </span>
-                          <span style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '13px', color: '#6B7280' }}>
-                            Puntualidad: {review.puntualidad_disponibilidad}/5
-                          </span>
-                          <span style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '13px', color: '#6B7280' }}>
-                            Pago: {review.claridad_cumplimiento_pago}/5
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Date */}
-                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                      <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '12px', color: '#9CA3AF', margin: 0 }}>
-                        {formatDate(review.created_at)}
-                      </p>
-                    </div>
-                  </div>
-                </Card>
-              ))}
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </>
       )}
-
-      {/* Detail Modal */}
-      <Modal
-        isOpen={!!selectedReview}
-        onClose={() => setSelectedReview(null)}
-        title={reviewType === 'specialist' ? 'Resena de Especialista' : 'Resena de Cliente'}
-        size="md"
-      >
-        {selectedReview && reviewType === 'specialist' && (
-          <div>
-            {/* Review Header */}
-            <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', paddingBottom: '24px', borderBottom: '1px solid #F3F4F6' }}>
-              <Avatar
-                src={(selectedReview as Review).client_profile?.avatar_url}
-                name={(selectedReview as Review).client_profile?.first_name}
-                size="xl"
-              />
-              <div>
-                <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '12px', color: '#9CA3AF', margin: '0 0 4px 0' }}>
-                  Resena de
-                </p>
-                <p style={{ fontFamily: "'Isidora Alt Bold', sans-serif", fontSize: '20px', color: '#36004E', margin: '0 0 4px 0' }}>
-                  {(selectedReview as Review).client_profile?.first_name} {(selectedReview as Review).client_profile?.last_name_paterno}
-                </p>
-                <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '14px', color: '#6B7280', margin: 0 }}>
-                  Para: {(selectedReview as Review).specialist_user_profile?.first_name}
-                </p>
-              </div>
-            </div>
-
-            {/* Rating */}
-            <div style={{ marginBottom: '24px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-                {renderStars((selectedReview as Review).rating)}
-                <span style={{ fontFamily: "'Isidora Alt Bold', sans-serif", fontSize: '24px', color: '#FBBF24' }}>
-                  {(selectedReview as Review).rating.toFixed(1)}
-                </span>
-              </div>
-
-              {/* Detailed Ratings */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
-                {(selectedReview as Review).calidad_trabajo && (
-                  <div style={{ padding: '12px', backgroundColor: '#F9FAFB', borderRadius: '10px' }}>
-                    <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '12px', color: '#9CA3AF', margin: '0 0 4px 0' }}>
-                      Calidad del Trabajo
-                    </p>
-                    <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '16px', fontWeight: 500, color: '#36004E', margin: 0 }}>
-                      {(selectedReview as Review).calidad_trabajo}/5
-                    </p>
-                  </div>
-                )}
-                {(selectedReview as Review).puntualidad && (
-                  <div style={{ padding: '12px', backgroundColor: '#F9FAFB', borderRadius: '10px' }}>
-                    <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '12px', color: '#9CA3AF', margin: '0 0 4px 0' }}>
-                      Puntualidad
-                    </p>
-                    <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '16px', fontWeight: 500, color: '#36004E', margin: 0 }}>
-                      {(selectedReview as Review).puntualidad}/5
-                    </p>
-                  </div>
-                )}
-                {(selectedReview as Review).profesionalismo && (
-                  <div style={{ padding: '12px', backgroundColor: '#F9FAFB', borderRadius: '10px' }}>
-                    <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '12px', color: '#9CA3AF', margin: '0 0 4px 0' }}>
-                      Profesionalismo
-                    </p>
-                    <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '16px', fontWeight: 500, color: '#36004E', margin: 0 }}>
-                      {(selectedReview as Review).profesionalismo}/5
-                    </p>
-                  </div>
-                )}
-                {(selectedReview as Review).relacion_calidad_precio && (
-                  <div style={{ padding: '12px', backgroundColor: '#F9FAFB', borderRadius: '10px' }}>
-                    <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '12px', color: '#9CA3AF', margin: '0 0 4px 0' }}>
-                      Relacion Calidad/Precio
-                    </p>
-                    <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '16px', fontWeight: 500, color: '#36004E', margin: 0 }}>
-                      {(selectedReview as Review).relacion_calidad_precio}/5
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Comment */}
-            {(selectedReview as Review).comment && (
-              <div style={{ marginBottom: '24px' }}>
-                <h4 style={{ fontFamily: "'Isidora Alt Bold', sans-serif", fontSize: '16px', color: '#36004E', margin: '0 0 12px 0' }}>
-                  Comentario
-                </h4>
-                <div style={{ padding: '16px', backgroundColor: '#F9FAFB', borderRadius: '12px' }}>
-                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '14px', color: '#4B5563', margin: 0, lineHeight: 1.6 }}>
-                    "{(selectedReview as Review).comment}"
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Would Work Again */}
-            {(selectedReview as Review).volveria_trabajar !== null && (
-              <div
-                style={{
-                  padding: '16px',
-                  backgroundColor: (selectedReview as Review).volveria_trabajar ? '#DCFCE7' : '#FEE2E2',
-                  borderRadius: '12px',
-                  marginBottom: '24px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                }}
-              >
-                {(selectedReview as Review).volveria_trabajar ? (
-                  <ThumbsUp style={{ width: '20px', height: '20px', color: '#16A34A' }} />
-                ) : (
-                  <ThumbsDown style={{ width: '20px', height: '20px', color: '#DC2626' }} />
-                )}
-                <span
-                  style={{
-                    fontFamily: "'Centrale Sans Rounded', sans-serif",
-                    fontSize: '14px',
-                    fontWeight: 500,
-                    color: (selectedReview as Review).volveria_trabajar ? '#166534' : '#991B1B',
-                  }}
-                >
-                  {(selectedReview as Review).volveria_trabajar
-                    ? 'El cliente volveria a contratar a este especialista'
-                    : 'El cliente no volveria a contratar a este especialista'}
-                </span>
-              </div>
-            )}
-
-            {/* Actions */}
-            <div style={{ display: 'flex', gap: '12px', paddingTop: '16px', borderTop: '1px solid #F3F4F6' }}>
-              <Button
-                variant="danger"
-                leftIcon={<Trash2 style={{ width: '16px', height: '16px' }} />}
-                onClick={() => {
-                  if (confirm('¿Estas seguro de eliminar esta resena?')) {
-                    deleteReview(selectedReview.id, 'specialist');
-                  }
-                }}
-              >
-                Eliminar Resena
-              </Button>
-              <Button variant="ghost" onClick={() => setSelectedReview(null)}>
-                Cerrar
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {selectedReview && reviewType === 'client' && (
-          <div>
-            {/* Review Header */}
-            <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', paddingBottom: '24px', borderBottom: '1px solid #F3F4F6' }}>
-              <Avatar
-                src={(selectedReview as ClientReview).specialist_user_profile?.avatar_url}
-                name={(selectedReview as ClientReview).specialist_user_profile?.first_name}
-                size="xl"
-              />
-              <div>
-                <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '12px', color: '#9CA3AF', margin: '0 0 4px 0' }}>
-                  Resena de
-                </p>
-                <p style={{ fontFamily: "'Isidora Alt Bold', sans-serif", fontSize: '20px', color: '#36004E', margin: '0 0 4px 0' }}>
-                  {(selectedReview as ClientReview).specialist_user_profile?.first_name}
-                </p>
-                <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '14px', color: '#6B7280', margin: 0 }}>
-                  Para cliente: {(selectedReview as ClientReview).client_profile?.first_name}
-                </p>
-              </div>
-            </div>
-
-            {/* Rating */}
-            <div style={{ marginBottom: '24px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-                {renderStars((selectedReview as ClientReview).average_score || 0)}
-                <span style={{ fontFamily: "'Isidora Alt Bold', sans-serif", fontSize: '24px', color: '#FBBF24' }}>
-                  {((selectedReview as ClientReview).average_score || 0).toFixed(1)}
-                </span>
-              </div>
-
-              {/* Detailed Ratings */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
-                <div style={{ padding: '12px', backgroundColor: '#F9FAFB', borderRadius: '10px' }}>
-                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '12px', color: '#9CA3AF', margin: '0 0 4px 0' }}>
-                    Claridad de Necesidades
-                  </p>
-                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '16px', fontWeight: 500, color: '#36004E', margin: 0 }}>
-                    {(selectedReview as ClientReview).claridad_necesidades}/5
-                  </p>
-                </div>
-                <div style={{ padding: '12px', backgroundColor: '#F9FAFB', borderRadius: '10px' }}>
-                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '12px', color: '#9CA3AF', margin: '0 0 4px 0' }}>
-                    Puntualidad
-                  </p>
-                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '16px', fontWeight: 500, color: '#36004E', margin: 0 }}>
-                    {(selectedReview as ClientReview).puntualidad_disponibilidad}/5
-                  </p>
-                </div>
-                <div style={{ padding: '12px', backgroundColor: '#F9FAFB', borderRadius: '10px' }}>
-                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '12px', color: '#9CA3AF', margin: '0 0 4px 0' }}>
-                    Cumplimiento de Pago
-                  </p>
-                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '16px', fontWeight: 500, color: '#36004E', margin: 0 }}>
-                    {(selectedReview as ClientReview).claridad_cumplimiento_pago}/5
-                  </p>
-                </div>
-                <div style={{ padding: '12px', backgroundColor: '#F9FAFB', borderRadius: '10px' }}>
-                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '12px', color: '#9CA3AF', margin: '0 0 4px 0' }}>
-                    Condiciones de Trabajo
-                  </p>
-                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '16px', fontWeight: 500, color: '#36004E', margin: 0 }}>
-                    {(selectedReview as ClientReview).facilito_condiciones_trabajo}/5
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Would Work Again */}
-            <div
-              style={{
-                padding: '16px',
-                backgroundColor: (selectedReview as ClientReview).volveria_trabajar_con_cliente ? '#DCFCE7' : '#FEE2E2',
-                borderRadius: '12px',
-                marginBottom: '24px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-              }}
-            >
-              {(selectedReview as ClientReview).volveria_trabajar_con_cliente ? (
-                <ThumbsUp style={{ width: '20px', height: '20px', color: '#16A34A' }} />
-              ) : (
-                <ThumbsDown style={{ width: '20px', height: '20px', color: '#DC2626' }} />
-              )}
-              <span
-                style={{
-                  fontFamily: "'Centrale Sans Rounded', sans-serif",
-                  fontSize: '14px',
-                  fontWeight: 500,
-                  color: (selectedReview as ClientReview).volveria_trabajar_con_cliente ? '#166534' : '#991B1B',
-                }}
-              >
-                {(selectedReview as ClientReview).volveria_trabajar_con_cliente
-                  ? 'El especialista volveria a trabajar con este cliente'
-                  : 'El especialista no volveria a trabajar con este cliente'}
-              </span>
-            </div>
-
-            {/* Actions */}
-            <div style={{ display: 'flex', gap: '12px', paddingTop: '16px', borderTop: '1px solid #F3F4F6' }}>
-              <Button
-                variant="danger"
-                leftIcon={<Trash2 style={{ width: '16px', height: '16px' }} />}
-                onClick={() => {
-                  if (confirm('¿Estas seguro de eliminar esta resena?')) {
-                    deleteReview(selectedReview.id, 'client');
-                  }
-                }}
-              >
-                Eliminar Resena
-              </Button>
-              <Button variant="ghost" onClick={() => setSelectedReview(null)}>
-                Cerrar
-              </Button>
-            </div>
-          </div>
-        )}
-      </Modal>
     </div>
+  );
+}
+
+/* ================================================================== */
+/*  Specialist expandable row                                          */
+/* ================================================================== */
+
+function SpecialistRowBlock({
+  row,
+  isExpanded,
+  onToggle,
+  tdStyle,
+  fontBody,
+  fontHeader,
+  rowHoverBg,
+  renderStars,
+  formatDate,
+  fmtNum,
+}: {
+  row: SpecialistRow;
+  isExpanded: boolean;
+  onToggle: () => void;
+  tdStyle: React.CSSProperties;
+  fontBody: React.CSSProperties;
+  fontHeader: React.CSSProperties;
+  rowHoverBg: string;
+  renderStars: (r: number) => React.ReactNode;
+  formatDate: (d: string) => string;
+  fmtNum: (n: number) => string;
+}) {
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <>
+      {/* Summary row */}
+      <tr
+        onClick={onToggle}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        style={{
+          cursor: 'pointer',
+          backgroundColor: isExpanded ? '#F3EAFC' : hovered ? rowHoverBg : '#FFFFFF',
+          transition: 'background-color 0.15s',
+        }}
+      >
+        <td style={{ ...tdStyle, width: '36px', textAlign: 'center' }}>
+          {isExpanded ? (
+            <ChevronUp style={{ width: '16px', height: '16px', color: '#AA1BF1' }} />
+          ) : (
+            <ChevronDown style={{ width: '16px', height: '16px', color: '#9CA3AF' }} />
+          )}
+        </td>
+        <td style={{ ...tdStyle, fontWeight: 600 }}>{row.name}</td>
+        <td style={{ ...tdStyle, textAlign: 'center' }}>{row.completedJobs}</td>
+        <td style={{ ...tdStyle, textAlign: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+            {renderStars(row.avgRating)}
+            <span style={{ fontWeight: 600, color: '#FBBF24' }}>{fmtNum(row.avgRating)}</span>
+          </div>
+        </td>
+        <td style={{ ...tdStyle, textAlign: 'center' }}>{fmtNum(row.avgCalidad)}</td>
+        <td style={{ ...tdStyle, textAlign: 'center' }}>{fmtNum(row.avgCumplimiento)}</td>
+        <td style={{ ...tdStyle, textAlign: 'center' }}>{fmtNum(row.avgProfesionalismo)}</td>
+        <td style={{ ...tdStyle, textAlign: 'center' }}>{fmtNum(row.avgPuntualidad)}</td>
+        <td style={{ ...tdStyle, textAlign: 'center' }}>{fmtNum(row.avgRelacionCalidad)}</td>
+        <td
+          style={{
+            ...tdStyle,
+            textAlign: 'center',
+            fontWeight: 600,
+            color: row.volveriaPercent >= 50 ? '#16A34A' : '#DC2626',
+          }}
+        >
+          {fmtNum(row.volveriaPercent)}%
+        </td>
+      </tr>
+
+      {/* Expanded individual reviews */}
+      {isExpanded && (
+        <tr>
+          <td colSpan={10} style={{ padding: 0 }}>
+            <div style={{ backgroundColor: '#FAFAFE', padding: '16px 24px 16px 56px' }}>
+              <h4
+                style={{
+                  ...fontHeader,
+                  fontSize: '14px',
+                  color: '#36004E',
+                  margin: '0 0 12px 0',
+                }}
+              >
+                Resenas individuales ({row.reviews.length})
+              </h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {row.reviews.map((rev: any) => (
+                  <div
+                    key={rev.id}
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: '10px',
+                      padding: '14px 18px',
+                      border: '1px solid #E5E7EB',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <span style={{ ...fontBody, fontSize: '14px', fontWeight: 600, color: '#36004E' }}>
+                          {rev.reviewerName}
+                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {renderStars(rev.rating || rev.average_score || 0)}
+                          <span style={{ ...fontBody, fontSize: '13px', fontWeight: 600, color: '#FBBF24' }}>
+                            {(rev.rating || rev.average_score || 0).toFixed(1)}
+                          </span>
+                        </div>
+                        {(rev.volveria_trabajar === true || rev.volveria_trabajar === false) && (
+                          <span
+                            style={{
+                              ...fontBody,
+                              fontSize: '12px',
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              backgroundColor: rev.volveria_trabajar === true ? '#DCFCE7' : '#FEE2E2',
+                              color: rev.volveria_trabajar === true ? '#166534' : '#991B1B',
+                              fontWeight: 500,
+                            }}
+                          >
+                            {rev.volveria_trabajar === true ? 'Volveria' : 'No volveria'}
+                          </span>
+                        )}
+                      </div>
+                      <span style={{ ...fontBody, fontSize: '12px', color: '#9CA3AF' }}>
+                        {rev.created_at ? formatDate(rev.created_at) : ''}
+                      </span>
+                    </div>
+                    {/* Category breakdown */}
+                    <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: rev.comment ? '8px' : '0' }}>
+                      {rev.calidad_trabajo != null && (
+                        <span style={{ ...fontBody, fontSize: '12px', color: '#6B7280' }}>Calidad: {rev.calidad_trabajo}/5</span>
+                      )}
+                      {rev.cumplimiento_servicio != null && (
+                        <span style={{ ...fontBody, fontSize: '12px', color: '#6B7280' }}>Cumplimiento: {rev.cumplimiento_servicio}/5</span>
+                      )}
+                      {rev.profesionalismo != null && (
+                        <span style={{ ...fontBody, fontSize: '12px', color: '#6B7280' }}>Profesionalismo: {rev.profesionalismo}/5</span>
+                      )}
+                      {rev.puntualidad != null && (
+                        <span style={{ ...fontBody, fontSize: '12px', color: '#6B7280' }}>Puntualidad: {rev.puntualidad}/5</span>
+                      )}
+                      {rev.relacion_calidad_precio != null && (
+                        <span style={{ ...fontBody, fontSize: '12px', color: '#6B7280' }}>Calidad/Precio: {rev.relacion_calidad_precio}/5</span>
+                      )}
+                    </div>
+                    {rev.comment && (
+                      <p style={{ ...fontBody, fontSize: '13px', color: '#4B5563', margin: 0, lineHeight: 1.5, fontStyle: 'italic' }}>
+                        &ldquo;{rev.comment}&rdquo;
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+/* ================================================================== */
+/*  Client expandable row                                              */
+/* ================================================================== */
+
+function ClientRowBlock({
+  row,
+  isExpanded,
+  onToggle,
+  tdStyle,
+  fontBody,
+  fontHeader,
+  rowHoverBg,
+  renderStars,
+  formatDate,
+  fmtNum,
+}: {
+  row: ClientRow;
+  isExpanded: boolean;
+  onToggle: () => void;
+  tdStyle: React.CSSProperties;
+  fontBody: React.CSSProperties;
+  fontHeader: React.CSSProperties;
+  rowHoverBg: string;
+  renderStars: (r: number) => React.ReactNode;
+  formatDate: (d: string) => string;
+  fmtNum: (n: number) => string;
+}) {
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <>
+      {/* Summary row */}
+      <tr
+        onClick={onToggle}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        style={{
+          cursor: 'pointer',
+          backgroundColor: isExpanded ? '#F3EAFC' : hovered ? rowHoverBg : '#FFFFFF',
+          transition: 'background-color 0.15s',
+        }}
+      >
+        <td style={{ ...tdStyle, width: '36px', textAlign: 'center' }}>
+          {isExpanded ? (
+            <ChevronUp style={{ width: '16px', height: '16px', color: '#AA1BF1' }} />
+          ) : (
+            <ChevronDown style={{ width: '16px', height: '16px', color: '#9CA3AF' }} />
+          )}
+        </td>
+        <td style={{ ...tdStyle, fontWeight: 600 }}>{row.name}</td>
+        <td style={{ ...tdStyle, textAlign: 'center' }}>{row.completedJobs}</td>
+        <td style={{ ...tdStyle, textAlign: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+            {renderStars(row.avgRating)}
+            <span style={{ fontWeight: 600, color: '#FBBF24' }}>{fmtNum(row.avgRating)}</span>
+          </div>
+        </td>
+        <td style={{ ...tdStyle, textAlign: 'center' }}>{fmtNum(row.avgClaridad)}</td>
+        <td style={{ ...tdStyle, textAlign: 'center' }}>{fmtNum(row.avgCumplimientoPago)}</td>
+        <td style={{ ...tdStyle, textAlign: 'center' }}>{fmtNum(row.avgPuntualidad)}</td>
+        <td style={{ ...tdStyle, textAlign: 'center' }}>{fmtNum(row.avgRespeto)}</td>
+        <td style={{ ...tdStyle, textAlign: 'center' }}>{fmtNum(row.avgFacilito)}</td>
+        <td
+          style={{
+            ...tdStyle,
+            textAlign: 'center',
+            fontWeight: 600,
+            color: row.volveriaPercent >= 50 ? '#16A34A' : '#DC2626',
+          }}
+        >
+          {fmtNum(row.volveriaPercent)}%
+        </td>
+      </tr>
+
+      {/* Expanded individual reviews */}
+      {isExpanded && (
+        <tr>
+          <td colSpan={10} style={{ padding: 0 }}>
+            <div style={{ backgroundColor: '#FAFAFE', padding: '16px 24px 16px 56px' }}>
+              <h4
+                style={{
+                  ...fontHeader,
+                  fontSize: '14px',
+                  color: '#36004E',
+                  margin: '0 0 12px 0',
+                }}
+              >
+                Resenas individuales ({row.reviews.length})
+              </h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {row.reviews.map((rev: any) => (
+                  <div
+                    key={rev.id}
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: '10px',
+                      padding: '14px 18px',
+                      border: '1px solid #E5E7EB',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <span style={{ ...fontBody, fontSize: '14px', fontWeight: 600, color: '#36004E' }}>
+                          {rev.reviewerName}
+                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {renderStars(rev.average_score || 0)}
+                          <span style={{ ...fontBody, fontSize: '13px', fontWeight: 600, color: '#FBBF24' }}>
+                            {(rev.average_score || 0).toFixed(1)}
+                          </span>
+                        </div>
+                        {(rev.volveria_trabajar_con_cliente === true || rev.volveria_trabajar_con_cliente === false) && (
+                          <span
+                            style={{
+                              ...fontBody,
+                              fontSize: '12px',
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              backgroundColor: rev.volveria_trabajar_con_cliente === true ? '#DCFCE7' : '#FEE2E2',
+                              color: rev.volveria_trabajar_con_cliente === true ? '#166534' : '#991B1B',
+                              fontWeight: 500,
+                            }}
+                          >
+                            {rev.volveria_trabajar_con_cliente === true ? 'Volveria' : 'No volveria'}
+                          </span>
+                        )}
+                      </div>
+                      <span style={{ ...fontBody, fontSize: '12px', color: '#9CA3AF' }}>
+                        {rev.created_at ? formatDate(rev.created_at) : ''}
+                      </span>
+                    </div>
+                    {/* Category breakdown */}
+                    <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                      {rev.claridad_necesidades != null && (
+                        <span style={{ ...fontBody, fontSize: '12px', color: '#6B7280' }}>Claridad: {rev.claridad_necesidades}/5</span>
+                      )}
+                      {rev.claridad_cumplimiento_pago != null && (
+                        <span style={{ ...fontBody, fontSize: '12px', color: '#6B7280' }}>Pago: {rev.claridad_cumplimiento_pago}/5</span>
+                      )}
+                      {rev.puntualidad_disponibilidad != null && (
+                        <span style={{ ...fontBody, fontSize: '12px', color: '#6B7280' }}>Puntualidad: {rev.puntualidad_disponibilidad}/5</span>
+                      )}
+                      {rev.respeto_profesionalismo_cliente != null && (
+                        <span style={{ ...fontBody, fontSize: '12px', color: '#6B7280' }}>Respeto: {rev.respeto_profesionalismo_cliente}/5</span>
+                      )}
+                      {rev.facilito_condiciones_trabajo != null && (
+                        <span style={{ ...fontBody, fontSize: '12px', color: '#6B7280' }}>Condiciones: {rev.facilito_condiciones_trabajo}/5</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }

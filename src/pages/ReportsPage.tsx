@@ -8,26 +8,10 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Card, Badge, SearchInput, Tabs, Modal, Button, EmptyState, Avatar } from '../components/ui';
-import type { Tables } from '../types/database';
 
-type ProblemReport = Tables<'specialist_problem_reports'> & {
-  client_profile?: Tables<'profiles'> | null;
-  specialist_profile?: Tables<'specialist_profiles'> | null;
-  specialist_user_profile?: Tables<'profiles'> | null;
-  service_request?: Tables<'service_requests'> | null;
-  quote?: Tables<'quotes'> | null;
-};
-
-type CancellationFeedback = Tables<'request_cancellation_feedback'> & {
-  user_profile?: Tables<'profiles'> | null;
-  service_request?: Tables<'service_requests'> | null;
-};
-
-type Rejection = Tables<'specialist_request_rejections'> & {
-  specialist_profile?: Tables<'specialist_profiles'> | null;
-  specialist_user_profile?: Tables<'profiles'> | null;
-  service_request?: Tables<'service_requests'> | null;
-};
+type ProblemReport = any;
+type CancellationFeedback = any;
+type Rejection = any;
 
 const reasonLabels: Record<string, string> = {
   no_show: 'No se presento',

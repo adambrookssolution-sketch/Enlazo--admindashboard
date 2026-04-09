@@ -9,23 +9,61 @@ import {
   XCircle,
   AlertTriangle,
   Bookmark,
+  ChevronDown,
+  ChevronRight,
+  Star,
+  Phone,
+  FileText,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Card, Badge, SearchInput, Tabs, Modal, Button, EmptyState, Avatar } from '../components/ui';
-import type { Tables } from '../types/database';
 
-type Quote = Tables<'quotes'> & {
-  specialist_profile?: Tables<'specialist_profiles'> | null;
-  specialist_user_profile?: Tables<'profiles'> | null;
-  service_request?: Tables<'service_requests'> | null;
-  client_profile?: Tables<'profiles'> | null;
-};
+interface Quote {
+  id: string;
+  request_id: string;
+  specialist_id: string;
+  status: string;
+  price_fixed: number | null;
+  price_min: number | null;
+  price_max: number | null;
+  proposed_date: string | null;
+  proposed_time_start: string | null;
+  proposed_time_end: string | null;
+  estimated_duration_hours: number | null;
+  scope: string | null;
+  description: string | null;
+  includes_materials: boolean | null;
+  materials_list: string | null;
+  has_warranty: boolean | null;
+  warranty_days: number | null;
+  warranty_description: string | null;
+  requires_visit: boolean | null;
+  visit_cost: number | null;
+  exclusions: string | null;
+  additional_notes: string | null;
+  attachments: any;
+  created_at: string;
+  specialist_profile?: any;
+  specialist_user_profile?: any;
+  service_request?: any;
+  client_profile?: any;
+}
 
-const statusConfig: Record<string, { label: string; variant: 'success' | 'warning' | 'error' | 'info' | 'default' | 'purple' }> = {
-  pending: { label: 'Pendiente', variant: 'warning' },
-  pre_selected: { label: 'Preseleccionada', variant: 'info' },
-  accepted: { label: 'Aceptada', variant: 'success' },
-  rejected: { label: 'Rechazada', variant: 'error' },
+interface SpecialistGroup {
+  specialist_id: string;
+  specialist_profile: any;
+  specialist_user_profile: any;
+  quotes: Quote[];
+  totalQuotes: number;
+  rating: number | null;
+  totalReviews: number | null;
+}
+
+const statusConfig: Record<string, { label: string; variant: 'success' | 'warning' | 'error' | 'info' | 'default' | 'purple'; bg: string; fg: string }> = {
+  pending: { label: 'Pendiente', variant: 'warning', bg: '#FEF3C7', fg: '#A16207' },
+  pre_selected: { label: 'Preseleccionada', variant: 'info', bg: '#DBEAFE', fg: '#1D4ED8' },
+  accepted: { label: 'Aceptada', variant: 'success', bg: '#DCFCE7', fg: '#15803D' },
+  rejected: { label: 'Rechazada', variant: 'error', bg: '#FEE2E2', fg: '#B91C1C' },
 };
 
 export function QuotesPage() {
@@ -34,6 +72,7 @@ export function QuotesPage() {
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState('all');
   const [selectedQuote, setSelectedQuote] = useState<Quote | null>(null);
+  const [expandedSpecialists, setExpandedSpecialists] = useState<Set<string>>(new Set());
   const [counts, setCounts] = useState({
     all: 0,
     pending: 0,
@@ -74,50 +113,55 @@ export function QuotesPage() {
         .order('created_at', { ascending: false });
 
       if (activeTab !== 'all') {
-        query = query.eq('status', activeTab as 'pending' | 'accepted' | 'rejected' | 'pre_selected');
+        query = query.eq('status', activeTab);
       }
 
       const { data, error } = await query;
 
       if (error) throw error;
 
-      const enrichedQuotes = await Promise.all(
-        (data || []).map(async (quote) => {
-          const [specialistProfileResult, requestResult] = await Promise.all([
-            supabase.from('specialist_profiles').select('*').eq('id', quote.specialist_id).single(),
-            supabase.from('service_requests').select('*').eq('id', quote.request_id).single(),
-          ]);
+      // Get unique specialist IDs
+      const specialistIds = [...new Set((data || []).map((q: any) => q.specialist_id).filter(Boolean))];
+      const requestIds = [...new Set((data || []).map((q: any) => q.request_id).filter(Boolean))];
 
-          let specialistUserProfile = null;
-          let clientProfile = null;
+      // Batch fetch specialist profiles
+      const { data: specialistProfiles } = specialistIds.length > 0
+        ? await supabase.from('specialist_profiles').select('*').in('id', specialistIds)
+        : { data: [] };
 
-          if (specialistProfileResult.data?.user_id) {
-            const { data: userProfile } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', specialistProfileResult.data.user_id)
-              .single();
-            specialistUserProfile = userProfile;
-          }
+      // Batch fetch service requests
+      const { data: serviceRequests } = requestIds.length > 0
+        ? await supabase.from('service_requests').select('*').in('id', requestIds)
+        : { data: [] };
 
-          if (requestResult.data?.user_id) {
-            const { data: profile } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', requestResult.data.user_id)
-              .single();
-            clientProfile = profile;
-          }
+      // Get user_ids from specialist profiles to fetch user profiles
+      const specialistUserIds = [...new Set((specialistProfiles || []).map((sp: any) => sp.user_id).filter(Boolean))];
+      const clientUserIds = [...new Set((serviceRequests || []).map((sr: any) => sr.user_id).filter(Boolean))];
+      const allUserIds = [...new Set([...specialistUserIds, ...clientUserIds])];
 
-          return {
-            ...quote,
-            specialist_profile: specialistProfileResult.data,
-            specialist_user_profile: specialistUserProfile,
-            service_request: requestResult.data,
-            client_profile: clientProfile,
-          };
-        })
-      );
+      const { data: userProfiles } = allUserIds.length > 0
+        ? await supabase.from('profiles').select('*').in('id', allUserIds)
+        : { data: [] };
+
+      // Build lookup maps
+      const spMap = new Map((specialistProfiles || []).map((sp: any) => [sp.id, sp]));
+      const srMap = new Map((serviceRequests || []).map((sr: any) => [sr.id, sr]));
+      const profileMap = new Map((userProfiles || []).map((p: any) => [p.id, p]));
+
+      const enrichedQuotes: Quote[] = (data || []).map((quote: any) => {
+        const sp = spMap.get(quote.specialist_id);
+        const sr = srMap.get(quote.request_id);
+        const specialistUserProfile = sp ? profileMap.get(sp.user_id) : null;
+        const clientProfile = sr ? profileMap.get(sr.user_id) : null;
+
+        return {
+          ...quote,
+          specialist_profile: sp || null,
+          specialist_user_profile: specialistUserProfile || null,
+          service_request: sr || null,
+          client_profile: clientProfile || null,
+        };
+      });
 
       setQuotes(enrichedQuotes);
     } catch (error) {
@@ -127,7 +171,7 @@ export function QuotesPage() {
     }
   }
 
-  async function updateQuoteStatus(quoteId: string, newStatus: 'pending' | 'accepted' | 'rejected' | 'pre_selected') {
+  async function updateQuoteStatus(quoteId: string, newStatus: string) {
     try {
       const { error } = await supabase
         .from('quotes')
@@ -144,16 +188,68 @@ export function QuotesPage() {
     }
   }
 
+  // Group quotes by specialist
+  function buildSpecialistGroups(filteredQuotes: Quote[]): SpecialistGroup[] {
+    const groupMap = new Map<string, SpecialistGroup>();
+
+    for (const quote of filteredQuotes) {
+      const key = quote.specialist_id || 'unknown';
+      if (!groupMap.has(key)) {
+        groupMap.set(key, {
+          specialist_id: key,
+          specialist_profile: quote.specialist_profile,
+          specialist_user_profile: quote.specialist_user_profile,
+          quotes: [],
+          totalQuotes: 0,
+          rating: quote.specialist_profile?.rating_promedio ?? null,
+          totalReviews: quote.specialist_profile?.total_reviews ?? null,
+        });
+      }
+      const group = groupMap.get(key)!;
+      group.quotes.push(quote);
+      group.totalQuotes = group.quotes.length;
+    }
+
+    // Sort by total quotes descending
+    return Array.from(groupMap.values()).sort((a, b) => b.totalQuotes - a.totalQuotes);
+  }
+
+  // Filter by search (specialist name, phone, RFC)
   const filteredQuotes = quotes.filter((quote) => {
     if (!search) return true;
-    const searchLower = search.toLowerCase();
+    const s = search.toLowerCase();
+    const firstName = quote.specialist_user_profile?.first_name?.toLowerCase() || '';
+    const lastNameP = quote.specialist_user_profile?.last_name_paterno?.toLowerCase() || '';
+    const lastNameM = quote.specialist_user_profile?.last_name_materno?.toLowerCase() || '';
+    const displayName = quote.specialist_user_profile?.display_name?.toLowerCase() || '';
+    const phone = quote.specialist_profile?.phone?.toLowerCase() || quote.specialist_user_profile?.phone?.toLowerCase() || '';
+    const rfc = quote.specialist_profile?.rfc?.toLowerCase() || '';
+    const fullName = `${firstName} ${lastNameP} ${lastNameM}`.trim();
+
     return (
-      quote.scope?.toLowerCase().includes(searchLower) ||
-      quote.description?.toLowerCase().includes(searchLower) ||
-      quote.specialist_user_profile?.first_name?.toLowerCase().includes(searchLower) ||
-      quote.service_request?.activity?.toLowerCase().includes(searchLower)
+      firstName.includes(s) ||
+      lastNameP.includes(s) ||
+      lastNameM.includes(s) ||
+      fullName.includes(s) ||
+      displayName.includes(s) ||
+      phone.includes(s) ||
+      rfc.includes(s)
     );
   });
+
+  const specialistGroups = buildSpecialistGroups(filteredQuotes);
+
+  function toggleSpecialist(specialistId: string) {
+    setExpandedSpecialists((prev) => {
+      const next = new Set(prev);
+      if (next.has(specialistId)) {
+        next.delete(specialistId);
+      } else {
+        next.add(specialistId);
+      }
+      return next;
+    });
+  }
 
   const tabs = [
     { id: 'all', label: 'Todas', count: counts.all },
@@ -173,11 +269,24 @@ export function QuotesPage() {
   }
 
   function formatPrice(quote: Quote) {
-    if (quote.price_fixed) return `$${quote.price_fixed.toLocaleString()}`;
-    if (quote.price_min && quote.price_max) return `$${quote.price_min.toLocaleString()} - $${quote.price_max.toLocaleString()}`;
-    if (quote.price_min) return `Desde $${quote.price_min.toLocaleString()}`;
-    if (quote.price_max) return `Hasta $${quote.price_max.toLocaleString()}`;
+    if (quote.price_fixed) return `$${Number(quote.price_fixed).toLocaleString()}`;
+    if (quote.price_min && quote.price_max) return `$${Number(quote.price_min).toLocaleString()} - $${Number(quote.price_max).toLocaleString()}`;
+    if (quote.price_min) return `Desde $${Number(quote.price_min).toLocaleString()}`;
+    if (quote.price_max) return `Hasta $${Number(quote.price_max).toLocaleString()}`;
     return 'Sin precio';
+  }
+
+  function getSpecialistName(group: SpecialistGroup) {
+    const p = group.specialist_user_profile;
+    if (p?.first_name) {
+      return `${p.first_name} ${p.last_name_paterno || ''}`.trim();
+    }
+    if (p?.display_name) return p.display_name;
+    return 'Especialista desconocido';
+  }
+
+  function getSpecialistPhone(group: SpecialistGroup) {
+    return group.specialist_profile?.phone || group.specialist_user_profile?.phone || '';
   }
 
   if (loading) {
@@ -201,13 +310,38 @@ export function QuotesPage() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
-        <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
-        <SearchInput value={search} onChange={setSearch} placeholder="Buscar cotizaciones..." />
+      <div style={{ marginBottom: '24px' }}>
+        <h1
+          style={{
+            fontFamily: "'Isidora Alt Bold', sans-serif",
+            fontSize: '28px',
+            fontWeight: 'bold',
+            color: '#36004E',
+            margin: '0 0 4px 0',
+          }}
+        >
+          Cotizaciones por Especialista
+        </h1>
+        <p
+          style={{
+            fontFamily: "'Centrale Sans Rounded', sans-serif",
+            fontSize: '14px',
+            color: '#6B7280',
+            margin: 0,
+          }}
+        >
+          Busca por especialista y visualiza todas las cotizaciones que ha enviado
+        </p>
       </div>
 
-      {/* Quotes Grid */}
-      {filteredQuotes.length === 0 ? (
+      {/* Tabs and Search */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
+        <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+        <SearchInput value={search} onChange={setSearch} placeholder="Buscar por nombre, telefono o RFC del especialista..." />
+      </div>
+
+      {/* Specialist Groups */}
+      {specialistGroups.length === 0 ? (
         <Card>
           <EmptyState
             icon={<MessageSquareQuote style={{ width: '28px', height: '28px', color: '#9CA3AF' }} />}
@@ -216,165 +350,333 @@ export function QuotesPage() {
           />
         </Card>
       ) : (
-        <div style={{ display: 'grid', gap: '16px' }}>
-          {filteredQuotes.map((quote) => {
-            const status = statusConfig[quote.status] || statusConfig.pending;
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {specialistGroups.map((group) => {
+            const isExpanded = expandedSpecialists.has(group.specialist_id);
+            const specialistName = getSpecialistName(group);
+            const specialistPhone = getSpecialistPhone(group);
+            const photoUrl = group.specialist_profile?.profile_photo_url || group.specialist_user_profile?.avatar_url;
+
             return (
-              <Card key={quote.id} hover onClick={() => setSelectedQuote(quote)}>
-                <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-                  {/* Left: Specialist Info */}
-                  <div style={{ flex: '1 1 300px', minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', marginBottom: '16px' }}>
-                      <Avatar
-                        src={quote.specialist_profile?.profile_photo_url || quote.specialist_user_profile?.avatar_url}
-                        name={quote.specialist_user_profile?.first_name}
-                        size="lg"
-                      />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', marginBottom: '4px' }}>
-                          <h3
-                            style={{
-                              fontFamily: "'Isidora Alt Bold', sans-serif",
-                              fontSize: '18px',
-                              fontWeight: 'bold',
-                              color: '#36004E',
-                              margin: 0,
-                            }}
-                          >
-                            {quote.specialist_user_profile?.first_name} {quote.specialist_user_profile?.last_name_paterno}
-                          </h3>
-                          <Badge variant={status.variant}>{status.label}</Badge>
-                        </div>
-                        <p
-                          style={{
-                            fontFamily: "'Centrale Sans Rounded', sans-serif",
-                            fontSize: '14px',
-                            color: '#6B7280',
-                            margin: 0,
-                          }}
-                        >
-                          {quote.specialist_profile?.specialist_type || 'Especialista'}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Service Request Info */}
-                    <div
-                      style={{
-                        padding: '12px 16px',
-                        backgroundColor: '#F9FAFB',
-                        borderRadius: '12px',
-                        marginBottom: '12px',
-                      }}
-                    >
-                      <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '12px', color: '#9CA3AF', margin: '0 0 4px 0' }}>
-                        Solicitud
-                      </p>
-                      <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '14px', color: '#36004E', fontWeight: 500, margin: 0 }}>
-                        {quote.service_request?.service_title || quote.service_request?.activity}
-                      </p>
-                      <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '13px', color: '#6B7280', margin: '4px 0 0 0' }}>
-                        Cliente: {quote.client_profile?.first_name} {quote.client_profile?.last_name_paterno}
-                      </p>
-                    </div>
-
-                    {quote.scope && (
-                      <p
-                        style={{
-                          fontFamily: "'Centrale Sans Rounded', sans-serif",
-                          fontSize: '14px',
-                          color: '#4B5563',
-                          margin: 0,
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical',
-                          overflow: 'hidden',
-                        }}
-                      >
-                        {quote.scope}
-                      </p>
+              <div key={group.specialist_id}>
+                {/* Specialist Row (clickable) */}
+                <div
+                  onClick={() => toggleSpecialist(group.specialist_id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '16px',
+                    padding: '16px 20px',
+                    backgroundColor: isExpanded ? '#F5F0F9' : '#FFFFFF',
+                    border: isExpanded ? '2px solid #AA1BF1' : '1px solid #E5E7EB',
+                    borderRadius: isExpanded ? '16px 16px 0 0' : '16px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isExpanded) {
+                      (e.currentTarget as HTMLDivElement).style.borderColor = '#AA1BF1';
+                      (e.currentTarget as HTMLDivElement).style.backgroundColor = '#FDFAFF';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isExpanded) {
+                      (e.currentTarget as HTMLDivElement).style.borderColor = '#E5E7EB';
+                      (e.currentTarget as HTMLDivElement).style.backgroundColor = '#FFFFFF';
+                    }
+                  }}
+                >
+                  {/* Expand/Collapse icon */}
+                  <div style={{ flexShrink: 0, color: '#AA1BF1' }}>
+                    {isExpanded ? (
+                      <ChevronDown style={{ width: '20px', height: '20px' }} />
+                    ) : (
+                      <ChevronRight style={{ width: '20px', height: '20px' }} />
                     )}
                   </div>
 
-                  {/* Right: Price & Details */}
+                  {/* Photo */}
+                  <Avatar src={photoUrl} name={specialistName} size="lg" />
+
+                  {/* Name & Info */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <h3
+                      style={{
+                        fontFamily: "'Isidora Alt Bold', sans-serif",
+                        fontSize: '18px',
+                        fontWeight: 'bold',
+                        color: '#36004E',
+                        margin: '0 0 4px 0',
+                      }}
+                    >
+                      {specialistName}
+                    </h3>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                      {specialistPhone && (
+                        <span
+                          style={{
+                            fontFamily: "'Centrale Sans Rounded', sans-serif",
+                            fontSize: '13px',
+                            color: '#6B7280',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                          }}
+                        >
+                          <Phone style={{ width: '13px', height: '13px' }} />
+                          {specialistPhone}
+                        </span>
+                      )}
+                      {group.specialist_profile?.rfc && (
+                        <span
+                          style={{
+                            fontFamily: "'Centrale Sans Rounded', sans-serif",
+                            fontSize: '13px',
+                            color: '#6B7280',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                          }}
+                        >
+                          <FileText style={{ width: '13px', height: '13px' }} />
+                          RFC: {group.specialist_profile.rfc}
+                        </span>
+                      )}
+                      {group.specialist_profile?.specialist_type && (
+                        <span
+                          style={{
+                            fontFamily: "'Centrale Sans Rounded', sans-serif",
+                            fontSize: '12px',
+                            color: '#AA1BF1',
+                            backgroundColor: '#F5F0F9',
+                            padding: '2px 8px',
+                            borderRadius: '6px',
+                          }}
+                        >
+                          {group.specialist_profile.specialist_type}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Rating */}
+                  <div style={{ textAlign: 'center', minWidth: '80px' }}>
+                    {group.rating != null ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}>
+                        <Star style={{ width: '16px', height: '16px', color: '#FBBF24', fill: '#FBBF24' }} />
+                        <span
+                          style={{
+                            fontFamily: "'Isidora Alt Bold', sans-serif",
+                            fontSize: '16px',
+                            fontWeight: 'bold',
+                            color: '#36004E',
+                          }}
+                        >
+                          {Number(group.rating).toFixed(1)}
+                        </span>
+                        <span
+                          style={{
+                            fontFamily: "'Centrale Sans Rounded', sans-serif",
+                            fontSize: '11px',
+                            color: '#9CA3AF',
+                          }}
+                        >
+                          ({group.totalReviews || 0})
+                        </span>
+                      </div>
+                    ) : (
+                      <span
+                        style={{
+                          fontFamily: "'Centrale Sans Rounded', sans-serif",
+                          fontSize: '12px',
+                          color: '#9CA3AF',
+                        }}
+                      >
+                        Sin resenas
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Total Quotes Count */}
                   <div
                     style={{
                       display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'flex-end',
-                      gap: '12px',
-                      minWidth: '180px',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '8px 16px',
+                      backgroundColor: '#36004E',
+                      borderRadius: '12px',
+                      minWidth: '100px',
+                      justifyContent: 'center',
                     }}
                   >
-                    <div style={{ textAlign: 'right' }}>
-                      <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '12px', color: '#9CA3AF', margin: '0 0 4px 0' }}>
-                        Precio Cotizado
-                      </p>
-                      <p
-                        style={{
-                          fontFamily: "'Isidora Alt Bold', sans-serif",
-                          fontSize: '22px',
-                          fontWeight: 'bold',
-                          color: '#22C55E',
-                          margin: 0,
-                        }}
-                      >
-                        {formatPrice(quote)}
-                      </p>
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                      {quote.has_warranty && (
-                        <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            padding: '4px 10px',
-                            backgroundColor: '#DCFCE7',
-                            borderRadius: '8px',
-                          }}
-                        >
-                          <Shield style={{ width: '14px', height: '14px', color: '#16A34A' }} />
-                          <span style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '12px', color: '#16A34A' }}>
-                            {quote.warranty_days}d garantia
-                          </span>
-                        </div>
-                      )}
-                      {quote.includes_materials && (
-                        <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            padding: '4px 10px',
-                            backgroundColor: '#DBEAFE',
-                            borderRadius: '8px',
-                          }}
-                        >
-                          <Package style={{ width: '14px', height: '14px', color: '#2563EB' }} />
-                          <span style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '12px', color: '#2563EB' }}>
-                            Incluye materiales
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
-                    {quote.proposed_date && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Calendar style={{ width: '14px', height: '14px', color: '#9CA3AF' }} />
-                        <span style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '13px', color: '#6B7280' }}>
-                          {formatDate(quote.proposed_date)}
-                        </span>
-                      </div>
-                    )}
-
-                    <span style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '12px', color: '#9CA3AF' }}>
-                      Enviada: {formatDate(quote.created_at)}
+                    <MessageSquareQuote style={{ width: '16px', height: '16px', color: '#FFFFFF' }} />
+                    <span
+                      style={{
+                        fontFamily: "'Isidora Alt Bold', sans-serif",
+                        fontSize: '16px',
+                        fontWeight: 'bold',
+                        color: '#FFFFFF',
+                      }}
+                    >
+                      {group.totalQuotes}
+                    </span>
+                    <span
+                      style={{
+                        fontFamily: "'Centrale Sans Rounded', sans-serif",
+                        fontSize: '11px',
+                        color: 'rgba(255,255,255,0.7)',
+                      }}
+                    >
+                      {group.totalQuotes === 1 ? 'cotizacion' : 'cotizaciones'}
                     </span>
                   </div>
                 </div>
-              </Card>
+
+                {/* Expanded Quotes List */}
+                {isExpanded && (
+                  <div
+                    style={{
+                      border: '2px solid #AA1BF1',
+                      borderTop: 'none',
+                      borderRadius: '0 0 16px 16px',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {group.quotes.map((quote, idx) => {
+                      const status = statusConfig[quote.status] || statusConfig.pending;
+                      return (
+                        <div
+                          key={quote.id}
+                          onClick={() => setSelectedQuote(quote)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '16px',
+                            padding: '14px 20px 14px 60px',
+                            backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA',
+                            cursor: 'pointer',
+                            borderBottom: idx < group.quotes.length - 1 ? '1px solid #F3F4F6' : 'none',
+                            transition: 'background-color 0.15s ease',
+                          }}
+                          onMouseEnter={(e) => {
+                            (e.currentTarget as HTMLDivElement).style.backgroundColor = '#F5F0F9';
+                          }}
+                          onMouseLeave={(e) => {
+                            (e.currentTarget as HTMLDivElement).style.backgroundColor = idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA';
+                          }}
+                        >
+                          {/* Category/Service */}
+                          <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+                            <p
+                              style={{
+                                fontFamily: "'Centrale Sans Rounded', sans-serif",
+                                fontSize: '14px',
+                                fontWeight: 500,
+                                color: '#36004E',
+                                margin: '0 0 2px 0',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {quote.service_request?.category || quote.service_request?.activity || quote.service_request?.service_title || 'Sin categoria'}
+                            </p>
+                            <p
+                              style={{
+                                fontFamily: "'Centrale Sans Rounded', sans-serif",
+                                fontSize: '12px',
+                                color: '#9CA3AF',
+                                margin: 0,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {quote.scope || quote.description || ''}
+                            </p>
+                          </div>
+
+                          {/* Price */}
+                          <div style={{ minWidth: '120px', textAlign: 'right' }}>
+                            <span
+                              style={{
+                                fontFamily: "'Isidora Alt Bold', sans-serif",
+                                fontSize: '16px',
+                                fontWeight: 'bold',
+                                color: '#22C55E',
+                              }}
+                            >
+                              {formatPrice(quote)}
+                            </span>
+                          </div>
+
+                          {/* Status Badge */}
+                          <div style={{ minWidth: '120px', textAlign: 'center' }}>
+                            <span
+                              style={{
+                                fontFamily: "'Centrale Sans Rounded', sans-serif",
+                                fontSize: '12px',
+                                fontWeight: 600,
+                                color: status.fg,
+                                backgroundColor: status.bg,
+                                padding: '4px 12px',
+                                borderRadius: '8px',
+                                display: 'inline-block',
+                              }}
+                            >
+                              {status.label}
+                            </span>
+                          </div>
+
+                          {/* Warranty */}
+                          <div style={{ minWidth: '100px', textAlign: 'center' }}>
+                            {quote.has_warranty ? (
+                              <span
+                                style={{
+                                  fontFamily: "'Centrale Sans Rounded', sans-serif",
+                                  fontSize: '12px',
+                                  color: '#15803D',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  justifyContent: 'center',
+                                }}
+                              >
+                                <Shield style={{ width: '13px', height: '13px' }} />
+                                {quote.warranty_days}d
+                              </span>
+                            ) : (
+                              <span
+                                style={{
+                                  fontFamily: "'Centrale Sans Rounded', sans-serif",
+                                  fontSize: '12px',
+                                  color: '#D1D5DB',
+                                }}
+                              >
+                                Sin garantia
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Date */}
+                          <div style={{ minWidth: '100px', textAlign: 'right' }}>
+                            <span
+                              style={{
+                                fontFamily: "'Centrale Sans Rounded', sans-serif",
+                                fontSize: '12px',
+                                color: '#6B7280',
+                              }}
+                            >
+                              {formatDate(quote.created_at)}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
@@ -396,8 +698,8 @@ export function QuotesPage() {
                   <h3 style={{ fontFamily: "'Isidora Alt Bold', sans-serif", fontSize: '22px', color: '#36004E', margin: 0 }}>
                     {selectedQuote.specialist_user_profile?.first_name} {selectedQuote.specialist_user_profile?.last_name_paterno}
                   </h3>
-                  <Badge variant={statusConfig[selectedQuote.status]?.variant}>
-                    {statusConfig[selectedQuote.status]?.label}
+                  <Badge variant={statusConfig[selectedQuote.status]?.variant || 'default'}>
+                    {statusConfig[selectedQuote.status]?.label || selectedQuote.status}
                   </Badge>
                 </div>
                 <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '15px', color: '#6B7280', margin: 0 }}>
@@ -405,7 +707,7 @@ export function QuotesPage() {
                 </p>
                 {selectedQuote.specialist_profile?.rating_promedio && (
                   <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '14px', color: '#FF9601', margin: '4px 0 0 0' }}>
-                    ★ {selectedQuote.specialist_profile.rating_promedio.toFixed(1)} ({selectedQuote.specialist_profile.total_reviews || 0} resenas)
+                    ★ {Number(selectedQuote.specialist_profile.rating_promedio).toFixed(1)} ({selectedQuote.specialist_profile.total_reviews || 0} resenas)
                   </p>
                 )}
               </div>
@@ -429,7 +731,7 @@ export function QuotesPage() {
               </p>
               <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '14px', color: '#6B7280', margin: 0 }}>
                 Cliente: {selectedQuote.client_profile?.first_name} {selectedQuote.client_profile?.last_name_paterno}
-                {selectedQuote.client_profile?.phone && ` • Tel: ${selectedQuote.client_profile.phone}`}
+                {selectedQuote.client_profile?.phone && ` \u2022 Tel: ${selectedQuote.client_profile.phone}`}
               </p>
             </div>
 
@@ -487,6 +789,11 @@ export function QuotesPage() {
                 <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '15px', color: '#36004E', fontWeight: 500, margin: 0 }}>
                   {selectedQuote.has_warranty ? `${selectedQuote.warranty_days} dias` : 'Sin garantia'}
                 </p>
+                {selectedQuote.warranty_description && (
+                  <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '12px', color: '#6B7280', margin: '4px 0 0 0' }}>
+                    {selectedQuote.warranty_description}
+                  </p>
+                )}
               </div>
 
               <div style={{ padding: '16px', backgroundColor: '#F9FAFB', borderRadius: '12px' }}>
@@ -544,7 +851,7 @@ export function QuotesPage() {
                   </p>
                   {selectedQuote.visit_cost && (
                     <p style={{ fontFamily: "'Centrale Sans Rounded', sans-serif", fontSize: '13px', color: '#B45309', margin: '4px 0 0 0' }}>
-                      Costo de visita: ${selectedQuote.visit_cost.toLocaleString()}
+                      Costo de visita: ${Number(selectedQuote.visit_cost).toLocaleString()}
                     </p>
                   )}
                 </div>
