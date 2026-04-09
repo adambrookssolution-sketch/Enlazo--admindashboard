@@ -13,7 +13,8 @@ import {
   AlertCircle,
   ExternalLink,
   LayoutGrid,
-  Table
+  Table,
+  Pencil
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -99,6 +100,32 @@ export function ApprovalsPage() {
   const [suspendReason, setSuspendReason] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editFormData, setEditFormData] = useState<{
+    phone: string;
+    email: string;
+    rfc: string;
+    razon_social: string;
+    specialist_type: string;
+    city: string;
+    state: string;
+    neighborhood: string;
+    postal_code: string;
+    street: string;
+    street_number: string;
+  }>({
+    phone: '',
+    email: '',
+    rfc: '',
+    razon_social: '',
+    specialist_type: '',
+    city: '',
+    state: '',
+    neighborhood: '',
+    postal_code: '',
+    street: '',
+    street_number: '',
+  });
 
   useEffect(() => {
     loadSpecialists();
@@ -363,6 +390,57 @@ export function ApprovalsPage() {
     }
   }
 
+  function openEditModal(specialist: SpecialistProfile) {
+    setSelectedSpecialist(specialist);
+    setEditFormData({
+      phone: specialist.phone || '',
+      email: specialist.email || '',
+      rfc: specialist.rfc || '',
+      razon_social: specialist.razon_social || '',
+      specialist_type: specialist.specialist_type || '',
+      city: specialist.city || '',
+      state: specialist.state || '',
+      neighborhood: specialist.neighborhood || '',
+      postal_code: specialist.postal_code || '',
+      street: specialist.street || '',
+      street_number: specialist.street_number || '',
+    });
+    setShowEditModal(true);
+  }
+
+  async function handleEditSave() {
+    if (!selectedSpecialist) return;
+    setActionLoading(true);
+    try {
+      const { error } = await supabase
+        .from('specialist_profiles')
+        .update({
+          phone: editFormData.phone || null,
+          email: editFormData.email || null,
+          rfc: editFormData.rfc || null,
+          razon_social: editFormData.razon_social || null,
+          specialist_type: editFormData.specialist_type || null,
+          city: editFormData.city || null,
+          state: editFormData.state || null,
+          neighborhood: editFormData.neighborhood || null,
+          postal_code: editFormData.postal_code || null,
+          street: editFormData.street || null,
+          street_number: editFormData.street_number || null,
+        })
+        .eq('id', selectedSpecialist.id);
+
+      if (error) throw error;
+
+      await loadSpecialists();
+      setShowEditModal(false);
+      setSelectedSpecialist(null);
+    } catch (error: any) {
+      alert('Error al guardar: ' + error.message);
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
   function renderDocLink(url: string | null, label: string) {
     if (!url) {
       return (
@@ -421,6 +499,13 @@ export function ApprovalsPage() {
           title="Ver detalles"
         >
           <Eye style={iconStyle} />
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); openEditModal(specialist); }}
+          style={{ ...btnBase, color: COLOR_ACCENT }}
+          title="Editar"
+        >
+          <Pencil style={iconStyle} />
         </button>
         {specialist.status === 'pending' && (
           <>
@@ -537,13 +622,25 @@ export function ApprovalsPage() {
               <div>{renderActionButtons(specialist)}</div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '10px', marginBottom: '14px' }}>
+            {/* Row 1: RFC, Tipo de Persona, Categorias, Telefono, Email */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px', marginBottom: '10px' }}>
               {infoItem('RFC', specialist.rfc)}
               {infoItem('Tipo de Persona', specialist.person_type === 'fisica' ? 'Fisica' : specialist.person_type === 'moral' ? 'Moral' : specialist.person_type)}
               {infoItem('Categorias', specialist.categories?.map((c: any) => c.category?.name || c.name).filter(Boolean).join(', ') || specialist.specialist_type || 'Sin categorias')}
               {infoItem('Telefono', specialist.phone)}
               {infoItem('Email', specialist.email)}
-              {infoItem('Direccion', [specialist.street, specialist.street_number, specialist.neighborhood, specialist.city, specialist.state, specialist.postal_code].filter(Boolean).join(', ') || 'No proporcionada')}
+            </div>
+            {/* Row 2: Address fields */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '10px', marginBottom: '10px' }}>
+              {infoItem('Calle', specialist.street)}
+              {infoItem('Numero', specialist.street_number)}
+              {infoItem('Colonia', specialist.neighborhood)}
+              {infoItem('Ciudad', specialist.city)}
+              {infoItem('Estado', specialist.state)}
+              {infoItem('C.P.', specialist.postal_code)}
+            </div>
+            {/* Row 3: Dates and policies */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '14px' }}>
               {infoItem('Fecha de Nacimiento / Constitucion', specialist.birth_or_constitution_date ? new Date(specialist.birth_or_constitution_date).toLocaleDateString('es-MX') : null)}
               {infoItem('Dias de Garantia', specialist.warranty_days?.toString())}
               {infoItem('Politica de Materiales', specialist.materials_policy)}
@@ -1069,12 +1166,31 @@ export function ApprovalsPage() {
               </div>
 
               {/* Address */}
-              <div style={{ padding: '14px', backgroundColor: '#F9FAFB', borderRadius: '12px', marginBottom: '16px' }}>
-                <p style={{ fontFamily: FONT_BODY, fontSize: '12px', color: '#6B7280', margin: '0 0 6px 0' }}>Direccion</p>
-                <p style={{ fontFamily: FONT_BODY, fontWeight: 500, color: COLOR_PRIMARY, margin: 0 }}>
-                  {[selectedSpecialist.street, selectedSpecialist.street_number].filter(Boolean).join(' #') || ''}{selectedSpecialist.neighborhood ? `, Col. ${selectedSpecialist.neighborhood}` : ''}{selectedSpecialist.city ? `, ${selectedSpecialist.city}` : ''}{selectedSpecialist.state ? `, ${selectedSpecialist.state}` : ''}{selectedSpecialist.postal_code ? ` C.P. ${selectedSpecialist.postal_code}` : ''}
-                  {!selectedSpecialist.street && !selectedSpecialist.city && !selectedSpecialist.state ? 'N/A' : ''}
-                </p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '12px', marginBottom: '16px' }}>
+                <div style={{ padding: '14px', backgroundColor: '#F9FAFB', borderRadius: '12px' }}>
+                  <p style={{ fontFamily: FONT_BODY, fontSize: '12px', color: '#6B7280', margin: '0 0 4px 0' }}>Calle</p>
+                  <p style={{ fontFamily: FONT_BODY, fontWeight: 500, color: COLOR_PRIMARY, margin: 0 }}>{selectedSpecialist.street || 'N/A'}</p>
+                </div>
+                <div style={{ padding: '14px', backgroundColor: '#F9FAFB', borderRadius: '12px' }}>
+                  <p style={{ fontFamily: FONT_BODY, fontSize: '12px', color: '#6B7280', margin: '0 0 4px 0' }}>Numero</p>
+                  <p style={{ fontFamily: FONT_BODY, fontWeight: 500, color: COLOR_PRIMARY, margin: 0 }}>{selectedSpecialist.street_number || 'N/A'}</p>
+                </div>
+                <div style={{ padding: '14px', backgroundColor: '#F9FAFB', borderRadius: '12px' }}>
+                  <p style={{ fontFamily: FONT_BODY, fontSize: '12px', color: '#6B7280', margin: '0 0 4px 0' }}>Colonia</p>
+                  <p style={{ fontFamily: FONT_BODY, fontWeight: 500, color: COLOR_PRIMARY, margin: 0 }}>{selectedSpecialist.neighborhood || 'N/A'}</p>
+                </div>
+                <div style={{ padding: '14px', backgroundColor: '#F9FAFB', borderRadius: '12px' }}>
+                  <p style={{ fontFamily: FONT_BODY, fontSize: '12px', color: '#6B7280', margin: '0 0 4px 0' }}>Ciudad</p>
+                  <p style={{ fontFamily: FONT_BODY, fontWeight: 500, color: COLOR_PRIMARY, margin: 0 }}>{selectedSpecialist.city || 'N/A'}</p>
+                </div>
+                <div style={{ padding: '14px', backgroundColor: '#F9FAFB', borderRadius: '12px' }}>
+                  <p style={{ fontFamily: FONT_BODY, fontSize: '12px', color: '#6B7280', margin: '0 0 4px 0' }}>Estado</p>
+                  <p style={{ fontFamily: FONT_BODY, fontWeight: 500, color: COLOR_PRIMARY, margin: 0 }}>{selectedSpecialist.state || 'N/A'}</p>
+                </div>
+                <div style={{ padding: '14px', backgroundColor: '#F9FAFB', borderRadius: '12px' }}>
+                  <p style={{ fontFamily: FONT_BODY, fontSize: '12px', color: '#6B7280', margin: '0 0 4px 0' }}>C.P.</p>
+                  <p style={{ fontFamily: FONT_BODY, fontWeight: 500, color: COLOR_PRIMARY, margin: 0 }}>{selectedSpecialist.postal_code || 'N/A'}</p>
+                </div>
               </div>
 
               {/* Extra fields */}
@@ -1374,6 +1490,68 @@ export function ApprovalsPage() {
                 style={{ flex: 1, padding: '12px 16px', border: 'none', backgroundColor: '#DC2626', color: 'white', fontWeight: 500, borderRadius: '12px', cursor: actionLoading ? 'not-allowed' : 'pointer', opacity: actionLoading ? 0.5 : 1, fontFamily: FONT_BODY }}
               >
                 {actionLoading ? 'Cargando...' : 'Revocar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {showEditModal && selectedSpecialist && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '16px', maxWidth: '600px', width: '100%', padding: '24px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+              <h3 style={{ fontFamily: FONT_HEADER, fontSize: '18px', fontWeight: 'bold', color: COLOR_PRIMARY, margin: 0 }}>
+                Editar Especialista
+              </h3>
+              <button onClick={() => { setShowEditModal(false); setSelectedSpecialist(null); }} style={{ padding: '8px', backgroundColor: 'transparent', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+                <X style={{ width: '20px', height: '20px' }} />
+              </button>
+            </div>
+
+            <p style={{ fontFamily: FONT_BODY, color: '#4B5563', marginBottom: '20px', fontSize: '14px' }}>
+              Editando datos de <strong>{getFullName(selectedSpecialist)}</strong>
+            </p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginBottom: '12px' }}>
+              {([
+                { key: 'phone', label: 'Telefono' },
+                { key: 'email', label: 'Email' },
+                { key: 'rfc', label: 'RFC' },
+                { key: 'razon_social', label: 'Razon Social' },
+                { key: 'specialist_type', label: 'Tipo de Especialista' },
+                { key: 'street', label: 'Calle' },
+                { key: 'street_number', label: 'Numero' },
+                { key: 'neighborhood', label: 'Colonia' },
+                { key: 'city', label: 'Ciudad' },
+                { key: 'state', label: 'Estado' },
+                { key: 'postal_code', label: 'C.P.' },
+              ] as { key: keyof typeof editFormData; label: string }[]).map(({ key, label }) => (
+                <div key={key}>
+                  <label style={{ fontFamily: FONT_BODY, fontSize: '12px', color: '#6B7280', display: 'block', marginBottom: '4px' }}>{label}</label>
+                  <input
+                    type="text"
+                    value={editFormData[key]}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, [key]: e.target.value }))}
+                    style={{ width: '100%', padding: '10px 14px', border: '1px solid #E5E7EB', borderRadius: '10px', fontSize: '14px', fontFamily: FONT_BODY, outline: 'none', boxSizing: 'border-box' }}
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', marginTop: '20px', paddingTop: '16px', borderTop: '1px solid #F3F4F6' }}>
+              <button
+                onClick={() => { setShowEditModal(false); setSelectedSpecialist(null); }}
+                style={{ flex: 1, padding: '12px 16px', border: '1px solid #E5E7EB', backgroundColor: 'white', color: '#374151', fontWeight: 500, borderRadius: '12px', cursor: 'pointer', fontFamily: FONT_BODY }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleEditSave}
+                disabled={actionLoading}
+                style={{ flex: 1, padding: '12px 16px', border: 'none', backgroundColor: COLOR_ACCENT, color: 'white', fontWeight: 500, borderRadius: '12px', cursor: actionLoading ? 'not-allowed' : 'pointer', opacity: actionLoading ? 0.5 : 1, fontFamily: FONT_BODY }}
+              >
+                {actionLoading ? 'Guardando...' : 'Guardar'}
               </button>
             </div>
           </div>
