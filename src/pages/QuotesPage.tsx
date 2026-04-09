@@ -5,10 +5,7 @@ import {
   Clock,
   Shield,
   Package,
-  CheckCircle,
-  XCircle,
   AlertTriangle,
-  Bookmark,
   ChevronDown,
   ChevronRight,
   Star,
@@ -168,23 +165,6 @@ export function QuotesPage() {
       console.error('Error loading quotes:', error);
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function updateQuoteStatus(quoteId: string, newStatus: string) {
-    try {
-      const { error } = await supabase
-        .from('quotes')
-        .update({ status: newStatus })
-        .eq('id', quoteId);
-
-      if (error) throw error;
-
-      loadQuotes();
-      loadCounts();
-      setSelectedQuote(null);
-    } catch (error) {
-      console.error('Error updating quote:', error);
     }
   }
 
@@ -660,15 +640,27 @@ export function QuotesPage() {
                           </div>
 
                           {/* Date */}
-                          <div style={{ minWidth: '100px', textAlign: 'right' }}>
+                          <div style={{ minWidth: '120px', textAlign: 'right' }}>
+                            {quote.proposed_date && (
+                              <span
+                                style={{
+                                  fontFamily: "'Centrale Sans Rounded', sans-serif",
+                                  fontSize: '12px',
+                                  color: '#36004E',
+                                  display: 'block',
+                                }}
+                              >
+                                Propuesta: {formatDate(quote.proposed_date)}
+                              </span>
+                            )}
                             <span
                               style={{
                                 fontFamily: "'Centrale Sans Rounded', sans-serif",
-                                fontSize: '12px',
-                                color: '#6B7280',
+                                fontSize: '11px',
+                                color: '#9CA3AF',
                               }}
                             >
-                              {formatDate(quote.created_at)}
+                              Creada: {formatDate(quote.created_at)}
                             </span>
                           </div>
                         </div>
@@ -858,59 +850,8 @@ export function QuotesPage() {
               </div>
             )}
 
-            {/* Actions */}
-            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', paddingTop: '24px', borderTop: '1px solid #F3F4F6' }}>
-              {selectedQuote.status === 'pending' && (
-                <>
-                  <Button
-                    variant="secondary"
-                    leftIcon={<Bookmark style={{ width: '16px', height: '16px' }} />}
-                    onClick={() => updateQuoteStatus(selectedQuote.id, 'pre_selected')}
-                  >
-                    Preseleccionar
-                  </Button>
-                  <Button
-                    variant="primary"
-                    leftIcon={<CheckCircle style={{ width: '16px', height: '16px' }} />}
-                    onClick={() => updateQuoteStatus(selectedQuote.id, 'accepted')}
-                  >
-                    Aceptar
-                  </Button>
-                  <Button
-                    variant="danger"
-                    leftIcon={<XCircle style={{ width: '16px', height: '16px' }} />}
-                    onClick={() => updateQuoteStatus(selectedQuote.id, 'rejected')}
-                  >
-                    Rechazar
-                  </Button>
-                </>
-              )}
-              {selectedQuote.status === 'pre_selected' && (
-                <>
-                  <Button
-                    variant="primary"
-                    leftIcon={<CheckCircle style={{ width: '16px', height: '16px' }} />}
-                    onClick={() => updateQuoteStatus(selectedQuote.id, 'accepted')}
-                  >
-                    Aceptar
-                  </Button>
-                  <Button
-                    variant="outline"
-                    leftIcon={<XCircle style={{ width: '16px', height: '16px' }} />}
-                    onClick={() => updateQuoteStatus(selectedQuote.id, 'pending')}
-                  >
-                    Quitar Preseleccion
-                  </Button>
-                </>
-              )}
-              {(selectedQuote.status === 'accepted' || selectedQuote.status === 'rejected') && (
-                <Button
-                  variant="outline"
-                  onClick={() => updateQuoteStatus(selectedQuote.id, 'pending')}
-                >
-                  Restablecer a Pendiente
-                </Button>
-              )}
+            {/* Close */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '24px', borderTop: '1px solid #F3F4F6' }}>
               <Button variant="ghost" onClick={() => setSelectedQuote(null)}>
                 Cerrar
               </Button>
