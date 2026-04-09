@@ -108,43 +108,7 @@ export function ApprovalsPage() {
     try {
       const { data, error } = await supabase
         .from('specialist_profiles')
-        .select(`
-          id,
-          user_id,
-          phone,
-          email,
-          rfc,
-          razon_social,
-          person_type,
-          specialist_type,
-          professional_description,
-          profile_photo_url,
-          id_document_url,
-          csf_document_url,
-          address_proof_url,
-          status,
-          city,
-          state,
-          neighborhood,
-          postal_code,
-          street,
-          street_number,
-          birth_or_constitution_date,
-          licenses_certifications,
-          materials_policy,
-          warranty_days,
-          accepted_terms_at,
-          created_at,
-          updated_at,
-          rejection_reason,
-          rejected_at,
-          rejected_by,
-          suspended_at,
-          suspended_reason,
-          suspended_by,
-          approved_at,
-          approved_by
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
