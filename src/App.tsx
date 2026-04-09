@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuth } from './hooks/useAuth';
@@ -26,13 +27,57 @@ const queryClient = new QueryClient({
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, isAdmin, isLoading } = useAuth();
+  // Show a "recovery" option if loading has been stuck for too long, so the
+  // user is never trapped on a blank Cargando screen.
+  const [showRecovery, setShowRecovery] = useState(false);
+
+  useEffect(() => {
+    if (!isLoading) {
+      setShowRecovery(false);
+      return;
+    }
+    const t = setTimeout(() => setShowRecovery(true), 5000);
+    return () => clearTimeout(t);
+  }, [isLoading]);
+
+  function handleRecovery() {
+    try {
+      // Clear all Supabase/admin session keys from both storages.
+      const targets = ['localStorage', 'sessionStorage'] as const;
+      targets.forEach((storeName) => {
+        const store = window[storeName];
+        const keys: string[] = [];
+        for (let i = 0; i < store.length; i++) {
+          const k = store.key(i);
+          if (k && (k.startsWith('sb-') || k.includes('supabase') || k.includes('enlazo-admin-auth'))) {
+            keys.push(k);
+          }
+        }
+        keys.forEach((k) => store.removeItem(k));
+      });
+    } catch {}
+    window.location.href = '/login';
+  }
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <div className="text-center max-w-md">
           <div className="w-12 h-12 border-4 border-morado-confianza/30 border-t-morado-confianza rounded-full animate-spin mx-auto mb-4" />
           <p className="text-gray-500">Cargando...</p>
+          {showRecovery && (
+            <div className="mt-6 p-4 bg-white rounded-xl shadow-sm border border-gray-100">
+              <p className="text-sm text-gray-600 mb-3">
+                ¿La carga está tardando demasiado? Puede ser una sesión en caché.
+              </p>
+              <button
+                onClick={handleRecovery}
+                className="px-4 py-2 bg-conexion-profunda text-white text-sm font-medium rounded-lg hover:bg-conexion-profunda/90 transition-colors"
+              >
+                Reiniciar sesión
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );
