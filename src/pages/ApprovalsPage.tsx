@@ -540,20 +540,14 @@ export function ApprovalsPage() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '10px', marginBottom: '14px' }}>
               {infoItem('RFC', specialist.rfc)}
               {infoItem('Tipo de Persona', specialist.person_type === 'fisica' ? 'Fisica' : specialist.person_type === 'moral' ? 'Moral' : specialist.person_type)}
-              {infoItem('Tipo de Especialista', specialist.specialist_type)}
+              {infoItem('Categorias', specialist.categories?.map((c: any) => c.category?.name || c.name).filter(Boolean).join(', ') || specialist.specialist_type || 'Sin categorias')}
               {infoItem('Telefono', specialist.phone)}
               {infoItem('Email', specialist.email)}
-              {infoItem('Estado', specialist.state)}
-              {infoItem('Ciudad', specialist.city)}
-              {infoItem('Colonia', specialist.neighborhood)}
-              {infoItem('Codigo Postal', specialist.postal_code)}
-              {infoItem('Calle', specialist.street)}
-              {infoItem('Numero', specialist.street_number)}
+              {infoItem('Direccion', [specialist.street, specialist.street_number, specialist.neighborhood, specialist.city, specialist.state, specialist.postal_code].filter(Boolean).join(', ') || 'No proporcionada')}
               {infoItem('Fecha de Nacimiento / Constitucion', specialist.birth_or_constitution_date ? new Date(specialist.birth_or_constitution_date).toLocaleDateString('es-MX') : null)}
               {infoItem('Dias de Garantia', specialist.warranty_days?.toString())}
               {infoItem('Politica de Materiales', specialist.materials_policy)}
               {infoItem('Fecha de Registro', new Date(specialist.created_at).toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' }))}
-              {infoItem('Ultima Actualizacion', specialist.updated_at ? new Date(specialist.updated_at).toLocaleDateString('es-MX') : null)}
             </div>
 
             {specialist.licenses_certifications && (
@@ -1057,8 +1051,8 @@ export function ApprovalsPage() {
                   <p style={{ fontFamily: FONT_BODY, fontWeight: 500, color: COLOR_PRIMARY, margin: 0 }}>{selectedSpecialist.person_type === 'fisica' ? 'Fisica' : selectedSpecialist.person_type === 'moral' ? 'Moral' : selectedSpecialist.person_type || 'N/A'}</p>
                 </div>
                 <div style={{ padding: '14px', backgroundColor: '#F9FAFB', borderRadius: '12px' }}>
-                  <p style={{ fontFamily: FONT_BODY, fontSize: '12px', color: '#6B7280', margin: '0 0 4px 0' }}>Tipo de Especialista</p>
-                  <p style={{ fontFamily: FONT_BODY, fontWeight: 500, color: COLOR_PRIMARY, margin: 0 }}>{selectedSpecialist.specialist_type || 'N/A'}</p>
+                  <p style={{ fontFamily: FONT_BODY, fontSize: '12px', color: '#6B7280', margin: '0 0 4px 0' }}>Categorias</p>
+                  <p style={{ fontFamily: FONT_BODY, fontWeight: 500, color: COLOR_PRIMARY, margin: 0 }}>{selectedSpecialist.categories?.map((c: any) => c.category?.name || c.name).filter(Boolean).join(', ') || selectedSpecialist.specialist_type || 'Sin categorias'}</p>
                 </div>
                 <div style={{ padding: '14px', backgroundColor: '#F9FAFB', borderRadius: '12px' }}>
                   <p style={{ fontFamily: FONT_BODY, fontSize: '12px', color: '#6B7280', margin: '0 0 4px 0' }}>Telefono</p>
