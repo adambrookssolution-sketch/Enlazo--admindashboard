@@ -27,40 +27,10 @@ CREATE POLICY "Admins can select any review"
   ON public.reviews FOR SELECT
   USING (public.is_admin(auth.uid()));
 
--- client_reviews
-DROP POLICY IF EXISTS "Admins can select any client review" ON public.client_reviews;
-CREATE POLICY "Admins can select any client review"
-  ON public.client_reviews FOR SELECT
-  USING (public.is_admin(auth.uid()));
-
--- specialist_problem_reports
-DROP POLICY IF EXISTS "Admins can select any problem report" ON public.specialist_problem_reports;
-CREATE POLICY "Admins can select any problem report"
-  ON public.specialist_problem_reports FOR SELECT
-  USING (public.is_admin(auth.uid()));
-
--- request_cancellation_feedback
-DROP POLICY IF EXISTS "Admins can select any cancellation feedback" ON public.request_cancellation_feedback;
-CREATE POLICY "Admins can select any cancellation feedback"
-  ON public.request_cancellation_feedback FOR SELECT
-  USING (public.is_admin(auth.uid()));
-
--- specialist_request_rejections
-DROP POLICY IF EXISTS "Admins can select any specialist rejection" ON public.specialist_request_rejections;
-CREATE POLICY "Admins can select any specialist rejection"
-  ON public.specialist_request_rejections FOR SELECT
-  USING (public.is_admin(auth.uid()));
-
 -- specialist_categories
 DROP POLICY IF EXISTS "Admins can select any specialist category" ON public.specialist_categories;
 CREATE POLICY "Admins can select any specialist category"
   ON public.specialist_categories FOR SELECT
-  USING (public.is_admin(auth.uid()));
-
--- locations (for service request locations)
-DROP POLICY IF EXISTS "Admins can select any location" ON public.locations;
-CREATE POLICY "Admins can select any location"
-  ON public.locations FOR SELECT
   USING (public.is_admin(auth.uid()));
 
 -- =============================================================================

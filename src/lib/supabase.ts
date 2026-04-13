@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '../types/database';
 
-const supabaseUrl = 'https://fvfeuarzelamrujvezwp.supabase.co';
-const supabaseAnonKey = 'sb_publishable_oeDC-Qb7gyNAJFkukb-TxA_GjFvXqDg';
+const supabaseUrl = 'https://njvugbobmhqsowaxibam.supabase.co';
+const supabaseAnonKey = 'sb_publishable_c3nVjYFY1D3wGlgNMT02DQ_lRbhVvxm';
 
 // Untyped client: generated Database types are out-of-date vs live schema
 // (admin migration adds columns the generator hasn't been re-run against).
